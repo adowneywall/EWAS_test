@@ -1,10 +1,23 @@
+##### Program Description ####
+   ## Created by: Olivier Francois
+   ## Last Edit: 25-01-2018
+
+
+##### Packages and Dependencies #####
+
+devtools::install_github("bcm-uga/lfmm")
+## Make sure to install additional dependencies in the event
+ # that some of h
+
+##### Parameter Description ####
+
 #n	number of individuals
 #p	number of response variables.
 #K	number of latent factors.
 #freq (vector) mean methylation values (if NULL, set randomly) 
 #prop.causal proportion of causal variables (probes/loci).
 #prop.variance proportion of phenotypic variance explained by latent structure (intensity of confounding).
-#sigma.error	standard deviation of residual errors.
+#sigma standard deviation of residual errors.
 #sd.B	standard deviation for effect sizes (B).
 #mean.B	(vector) mean of effect sizes.
 #sd.U (vector) standard deviations for factors.
@@ -14,10 +27,10 @@ ewas_generator <- function (n,
                             p, 
                             K, 
                             freq = NULL,
-                            prop.causal = 0.025, 
-                            prop.variance = 0.6, 
-                            sigma = 0.2, 
-                            sd.B = 1.0, 
+                            prop.causal = 0.025,  # proportion of loci that are causal
+                            prop.variance = 0.6,  # intensity of confounding
+                            sigma = 0.2, # standard deviation of residual errors
+                            sd.B = 1.0,  # standard deviation of effect size
                             mean.B = 5.0, 
                             sd.U = 1.0, 
                             sd.V = 1.0) 
@@ -68,9 +81,9 @@ ewas_generator <- function (n,
 ## SD for confounders c(.8, .6, .5)
 simu <- ewas_generator(n = 200, 
                        p = 1000, 
-                       K = 3, 
-                       prop.variance = 0.8,
-                       sd.U = c(.8, .6, .5),
+                       K = 5, 
+                       prop.variance = 0.4,
+                       sd.U = c(.8, .6, .5,.3,.2),
                        mean.B = .2,
                        sd.B = 0.01,
                        sd.V = 0.1,
@@ -114,12 +127,71 @@ which(-log10(p.value) > 3) %in% simu$causal
 gif <- median(z.score^2)/0.456
 p.values.calibrated <- pchisq(z.score^2/gif , df = 1, low = F)
 hist(p.values.calibrated)
-plot(-log10(p.values.calibrated))
+plot(-log10(p.values.calibrated)~c(1:1000),xlab="Loci Position")
+#order(simu$causal)
+#simu$causal[1]
+points(-log10(p.values.calibrated)[simu$causal]~simu$causal,
+     col="red",pch=16)
+points(-log10(p.values.calibrated)[which(-log10(p.values.calibrated) > 4)]~which(-log10(p.values.calibrated) > 4),
+       col="blue",pch=21,cex=2)
+abline(h = 4,col="red")
 
 # power
-which(-log10(p.values.calibrated) > 4) %in% simu$causal
+length(which(-log10(p.values.calibrated) > 4) %in% simu$causal)
+# Type one  error
+length(simu$causal %in% which(-log10(p.values.calibrated) > 4))
+  
+ewas_test<-function(n = 200, 
+          p = 1000, 
+          K = 3, 
+          prop.variance = 0.4,
+          sd.U = c(.8, .6, .5),
+          mean.B = .2,
+          sd.B = 0.01,
+          sd.V = 0.1,
+          sigma = .1,
+          times = 10
+          ){
+  
+  eval.mat<-matrix(,nrow=times,ncol=2)
+  for(i in 1:times){
+    simu<-ewas_generator(n = n, 
+                   p = p, 
+                   K = K, 
+                   prop.variance = prop.variance,
+                   sd.U = sd.U,
+                   mean.B = mean.B,
+                   sd.B = sd.B,
+                   sd.V = sd.V,
+                   sigma = sigma)
+    mod <- lfmm::lfmm_ridge(simu$Y, simu$X, K = 3)
+    z.score <- NULL
+    for (j in 1:1000){
+      mod.glm <- glm(simu$Y[,j] ~ ., 
+                     data = data.frame(simu$X, mod$U),
+                     binomial(link = "probit"))
+      #p.value[j] <- summary(mod.glm)$coeff[2,4]
+      z.score[j] <- summary(mod.glm)$coeff[2,3] 
+    }
+    # power
+    eval.mat[i,1]<-mean(which(-log10(p.values.calibrated) > 4) %in% simu$causal)
+    # Type one  error
+    eval.mat[i,2]<-mean(!(simu$causal %in% which(-log10(p.values.calibrated) > 4)))
+  }
+  return(eval.mat)
+}
 
 
-
+ewas.eval.out<-ewas_test(n = 200, 
+                    p = 1000, 
+                    K = 3, 
+                    prop.variance = 0.4,
+                    sd.U = c(.8, .6, .5),
+                    mean.B = .2,
+                    sd.B = 0.01,
+                    sd.V = 0.1,
+                    sigma = .1,
+                    times = 10
+)
 
 
