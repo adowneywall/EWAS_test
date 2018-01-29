@@ -1,5 +1,5 @@
 
-
+TOBECOMPLETED
 
 #### Scenario 1 ####
  # We simulated DNA methylation data at 2000 CpG sites across 
@@ -14,26 +14,18 @@ p = 2000 # number of loci
 
 ### Phenotype / covariate of interest
 
-# mean.p = 0
-# var.p = 1
-# coef.p = 0.3
-# inter.p = 0.5
+mean.p  = 0 # mean value
+var.p   = 1 # variance
+coef.p  = 0.3 # coefficient
+inter.p = 0.5 # intercept
 
 ### Latent factors / additional covariates
  # Five latent factors.
  # Normal distributions: N(0,5),
  # N(3,1), N(0,1), N(2,4), N(0,3)
 
-mean.1.lat = 0
-var.1.lat = 5
-mean.2.lat = 3
-var.2.lat = 1
-mean.3.lat = 0
-var.3.lat = 1
-mean.4.lat = 2
-var.4.lat = 4
-mean.5.lat = 0
-var.5.lat = 3
+mean.lats <- c(0,3,0,2,0)
+var.lats <- c(5,1,1,4,3)
 
  # The association of DNA methylation and the latent
  # variables was assumed linear and the coefficients
@@ -53,7 +45,17 @@ var.5.lat = 3
  # cell types on DNA methylation was weaker.
  
  
- kaushalsim1 <- function(
+ kaushalsim1 <- function(times = times,
+                         n = n,
+                         p = p,
+                         outliers = outliers,
+                         mean.p  = mean.p, 
+                         var.p   = var.p, 
+                         coef.p  = coef.p,
+                         inter.p = inter.p,
+                         mean.lats = mean.lats,
+                         var.lats = var.lats,
+                         
  ){
    
  }
