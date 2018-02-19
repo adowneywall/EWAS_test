@@ -27,6 +27,7 @@ est.confounder.num(~ X1, X.data, data$Y, method = "ed")
 est.confounder.num(~ X1, X.data, data$Y, method = "bcv")
 
 #### Example using the generated EWAS data ####
+
 simu <- ewas_generator(n = 200, 
                        p = 1000, 
                        K = 7, 
@@ -35,7 +36,7 @@ simu <- ewas_generator(n = 200,
                        mean.B = .2,
                        sd.B = 0.1,
                        sd.V = 0.5,
-                       sigma = .1,
+                       sigma = 0.1,
                        setSeed = 5) 
 
 
