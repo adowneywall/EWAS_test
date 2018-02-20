@@ -69,7 +69,7 @@ ewas_generator <- function (n,
          )
 }
 
-
+simu$
   
 ewas_test<-function(n = 200, 
           p = 1000, 
@@ -110,5 +110,6 @@ ewas_test<-function(n = 200,
   }
   return(eval.mat)
 }
+
 
 ewas.eval.out

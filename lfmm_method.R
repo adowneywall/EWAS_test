@@ -15,12 +15,13 @@ simu <- ewas_generator(n = 200,
                        K = 7, 
                        prop.variance = 0.4,
                        sd.U = c(.8, .6, .5,.3,.2,.4,.3),
-                       mean.B = .2,
+                       mean.B = 5,
                        sd.B = 0.01,
                        sd.V = 0.1,
                        sigma = .1,
                        setSeed = 5)
-
+simu$B
+hist(simu$B)
 ## check that R2 = 0.8
 summary( lm( simu$X ~ simu$U) )
 
