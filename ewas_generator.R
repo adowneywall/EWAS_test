@@ -34,19 +34,18 @@ ewas_generator <- function (n,
   outlier.nb = length(outlier)
 
   if (is.null(freq)) freq <- runif(p)
-  
   cs <- runif(K, min = -1, max = 1)
   theta <- sqrt(prop.variance/sum((cs/sd.U)^2))
   
-  Sigma <- diag(x = sd.U^2, nrow = K, ncol = K)
+  Sigma <- diag(x = sd.U^2, nrow = K, ncol = K) # Identity matrix with standard deviation along diagonal
   Sigma <- rbind(Sigma, matrix(cs*theta, nrow = 1))
   Sigma <- cbind(Sigma, matrix(c(cs*theta, 1), ncol = 1))
+  covar.mat<-Sigma
   
   UX <- MASS::mvrnorm(n, mu = rep(0, K + 1), Sigma = Sigma)
   U <- UX[, 1:K, drop = FALSE]
   X <- UX[, K + 1, drop = FALSE]
   V <- MASS::mvrnorm(p, mu = rep(0, K), Sigma = sd.V^2 * diag(K))
-  
   B <- matrix(0, p, 1)
   B[outlier, 1] <- rnorm(outlier.nb, mean.B, sd.B)
   
@@ -55,12 +54,12 @@ ewas_generator <- function (n,
   
   Z = U %*% t(V) + X %*% t(B) + Epsilon
   Y = matrix(rep(qnorm(freq),n), nrow = n, byrow = T) + Z
-  
   Y = pnorm(Y)
   
   return(list(Y = Y, #beta values
               X = X, #phenotype
-              causal = outlier, #set of causal loci 
+              causal = outlier, #set of causal loci
+              covar.mat = covar.mat, #covariance matrix
               U = U, #simulated confounders
               V = V, #loadings
               B = B,  #effect sizes
@@ -69,8 +68,58 @@ ewas_generator <- function (n,
          )
 }
 
-simu$
-  
+# simu <- ewas_generator(n = 10000, 
+#                        p = 100, 
+#                        K = 5, 
+#                        prop.variance = .99,
+#                        sd.U = c(.05,.05,.05,.05,.05),
+#                        mean.B = 5,
+#                        sd.B = 0.01,
+#                        sd.V = 0.1,
+#                        sigma = .1)
+# 
+# 
+# cov2cor(simu$covar.mat)
+# summary(lm( simu$X ~ simu$U))
+# library(Rarity)
+# #pairs(cbind(simu$U,simu$X))
+# corPlot(cbind(simu$U,simu$X),method = "spearman")
+# 
+# hold<-seq(from=0,to=1,by=.01)
+# 
+# theta.confound.var<-sqrt(hold/sum((0.1/0.5)^2))
+# plot(theta.confound.var~hold,type="l",xlab="degree of confounding",ylab="theta")
+# 
+# theta.csvar<-sapply(hold,function(x){sqrt(1/sum((x/0.5)^2))})
+# plot(theta.csvar~hold,type="l",xlab="value of casual loci",ylab="theta")
+# 
+# theta.sdvar<-sapply(hold,function(x){sqrt(1/sum((.5/x)^2))})
+# plot(theta.csvar~hold,type="l",xlab="sd of casual loci",ylab="theta")
+# 
+# hold*theta.confound.var
+# 
+# simu$B
+# simu$causal
+# 
+# mod.glm <- glm(simu$Y[,201] ~ simu$X + simu$U,model = )
+# plot(simu$Y[,201] ~ simu$X + simu$U)
+# summary(mod.glm)
+# simu$B[803]
+# simu$V[803,]
+# mod.glm2 <- glm(simu$Y[,803] ~ simu$X + simu$U[,c(1,7)],
+#                family=binomial(link = "probit"))
+# mod.glm2 <- glm(simu$Y[,803] ~ .,
+#                 data = data.frame(simu$X,simu$U),
+#                 family=binomial(link = "probit"))
+# plot(simu$Y[,803]~simu$X)
+# summary(mod.glm2)
+# 
+# (Sigma <- diag(x = sd.U^2, nrow = K, ncol = K))
+# Sigma <- rbind(Sigma, matrix(cs*theta, nrow = 1))
+# Sigma <- cbind(Sigma, matrix(c(cs*theta, 1), ncol = 1))
+# UX <- MASS::mvrnorm(n, mu = rep(0, K + 1), Sigma = Sigma)
+# U <- UX[, 1:K, drop = FALSE]
+
 ewas_test<-function(n = 200, 
           p = 1000, 
           K = 3, 

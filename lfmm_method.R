@@ -11,8 +11,9 @@ source(file = "ewas_generator.R")
 ## simulated phenotype (R2 = 0.8)
 ## SD for confounders c(.8, .6, .5)
 simu <- ewas_generator(n = 200, 
-                       p = 1000, 
+                       p = length(testing.mean.Est), 
                        K = 7, 
+                       freq= testing.mean.Est,
                        prop.variance = 0.4,
                        sd.U = c(.8, .6, .5,.3,.2,.4,.3),
                        mean.B = 5,
@@ -20,7 +21,6 @@ simu <- ewas_generator(n = 200,
                        sd.V = 0.1,
                        sigma = .1,
                        setSeed = 5)
-simu$B
 hist(simu$B)
 ## check that R2 = 0.8
 summary( lm( simu$X ~ simu$U) )
