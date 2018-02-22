@@ -11,19 +11,19 @@ source(file = "ewas_generator.R")
 ## simulated phenotype (R2 = 0.8)
 ## SD for confounders c(.8, .6, .5)
 simu <- ewas_generator(n = 200, 
-                       p = length(testing.mean.Est), 
+                       p = 1000, 
                        K = 7, 
-                       freq= testing.mean.Est,
+                       freq= NULL,
                        prop.variance = 0.4,
                        sd.U = c(.8, .6, .5,.3,.2,.4,.3),
                        mean.B = 5,
                        sd.B = 0.01,
                        sd.V = 0.1,
-                       sigma = .1,
-                       setSeed = 5)
+                       sigma = .1)
+                       
 hist(simu$B)
 ## check that R2 = 0.8
-summary( lm( simu$X ~ simu$U) )
+summary(lm( simu$X ~ simu$U))
 
 # methylation data for probe 4
 hist(as.numeric(simu$Y[,4]))

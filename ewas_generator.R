@@ -51,7 +51,6 @@ ewas_generator <- function (n,
   
   Epsilon = MASS::mvrnorm(n, mu = rep(0, p), Sigma = sigma^2 * diag(p))
   
-  
   Z = U %*% t(V) + X %*% t(B) + Epsilon
   Y = matrix(rep(qnorm(freq),n), nrow = n, byrow = T) + Z
   Y = pnorm(Y)

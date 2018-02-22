@@ -1,4 +1,9 @@
 
+
+#devtools::install_github("bcm-uga/lfmm")
+library(cate)
+library(lfmm)
+
 tot.count<-read.table("DATA/Empirical_Data/baboon_example/BSSeq_Baboon/counts_chr1_n50.txt",header = T,row.names = 1)
 m.count<-read.table("DATA/Empirical_Data/baboon_example/BSSeq_Baboon/mcounts_chr1_n50.txt",header=T,row.names = 1)
 p.variable<-read.table("DATA/Empirical_Data/baboon_example/BSSeq_Baboon/predictor_n50.txt")
@@ -22,7 +27,7 @@ beta.mat<-as.matrix(beta)
 proportion.NA<-function(x){sum(is.na(x))/50}
 testing.NA<-apply(beta.mat,1,proportion.NA)
 plot(density(testing.NA))
-beta.mat[testing.NA == 0.00,]
+beta.mat.NONA<-beta.mat[testing.NA == 0.00,]
 dim(beta.mat.NONA)
 
 
@@ -42,7 +47,7 @@ dim(beta.mat.NONA.varlow)
 
 
 
-## Estimate confounders ####
+#### Estimate confounders (K value)####
 
 ## Based on cate package
 est.confounder.num(~ V1, p.variable, t(beta.mat.NONA.varlow), method = "ed")
@@ -52,28 +57,74 @@ est.confounder.num(~ V1, p.variable, t(beta.mat.NONA.varlow), method = "bcv")
 num_sv     <- sva::num.sv(dat = beta.mat.NONA.varlow, mod = p.variable$V1, method = "be")
 num_sv_l   <- sva::num.sv(dat = beta.mat.NONA.varlow, mod = p.variable$V1, method = "leek")
 
-
-## lfmm ####
-mod <- lfmm::lfmm_ridge(t(beta.mat.NONA.varlow),p.variable$V1,K = 5)
-??lfmm_ridge()
+# K ####
+K<-5
+#### lfmm ####
+mod <- lfmm::lfmm_ridge(t(beta.mat.NONA.varlow),p.variable$V1,K = K)
 ## tests based on GLMs -- replaces lfmm_testing() function in lfmm package due to the binomial nature of data
 
+
+## Covariance examination between predictor and estimated latent factors ####
+## Cov matrix based on lfmm latent factors and predictor
+covariance.mat<-cov(cbind(mod$U,p.variable$V1))
+cov2cor(covariance.mat)
+library(Rarity)
+corPlot(cbind(mod$U,p.variable$V1),method = "spearman")
+
+## Total correlation (r2) between predictor and estimated latent factors
+summary(lm(p.variable$V1 ~ mod$U))
+
+## Calculating p-values using glm with probit link function - based on lfmm latent factor estimation ####
 p.value <- NULL
 z.score <- NULL
-for (j in 1:1000){
-  mod.glm <- glm(t(beta.mat.NONA.varlow)[,j] ~ ., 
-                 data = data.frame(p.variable$V1, mod$U),
-                 binomial(link = "probit"))
-  p.value[j] <- summary(mod.glm)$coeff[2,4]
-  z.score[j] <- summary(mod.glm)$coeff[2,3] 
+effect.mat <- matrix(ncol=K+1,nrow=nrow(beta.mat.NONA.varlow)) #
+error.loci<-NULL
+for (j in 1:nrow(beta.mat.NONA.varlow)){ #nrow(beta.mat.NONA.varlow)
+  if(max(t(beta.mat.NONA.varlow)[,j])<=1){
+    mod.glm <- glm(t(beta.mat.NONA.varlow)[,j] ~ ., 
+                   data = data.frame(p.variable$V1, mod$U),
+                   binomial(link = "probit"))
+    p.value[j] <- summary(mod.glm)$coeff[2,4]
+    z.score[j] <- summary(mod.glm)$coeff[2,3]
+    effect.mat[j,] <- summary(mod.glm)$coeff[2:(K+2),1]
+  }
+  else{
+    error.loci<-c(error.loci,j)
+  }
 }
+p.value.corr<-p.value[!is.na(p.value)]
+z.score.corr<-z.score[!is.na(z.score)]
+effect.mat.corr<-effect.mat[complete.cases(effect.mat),]
 
+### Examining the effect sizes
+library(lattice)
+library(reshape2)
 
+# create dataframe with effect sizes for predictor + latent factors
+e.m<-data.frame(effect.mat.corr)
+colnames(e.m)<-c("Predictor",paste("L",seq(from=1,to=K,by=1),sep=""))
 
-gif <- median(z.score^2)/0.456
-p.values.calibrated <- pchisq(z.score^2/gif , df = 1, low = F)
+##Plot of predictor effect sizes (shown as abs)
+
+# effect size distribution associated with predictor
+densityplot(~abs(Predictor),data=e.m,auto.key = T) 
+
+# effect size distribution associated with predictor and all latent factors
+densityplot(~abs(e.m$Predictor)+abs(unlist(e.m[,2:K+1])),auto.key = T) 
+
+# Plot of predictors and all latent factors plotted separately
+e.melt<-melt(e.m)
+densityplot(~ abs(value), groups = variable, data = e.melt, auto.key = TRUE)
+
+## Basic effect size stats
+mean.effect<-apply(effect.mat.corr,2,mean)
+sd.effect<-apply(effect.mat.corr,2,sd)
+
+### Calculating p-values based on corrected z-scores w/ genomic inflation factor (gif)
+gif <- median(z.score.corr^2)/0.456
+p.values.calibrated <- pchisq(z.score.corr^2/gif , df = 1, low = F)
 hist(p.values.calibrated)
-plot(-log10(p.values.calibrated)~c(1:1000),xlab="Loci Position")
+plot(-log10(p.values.calibrated)~c(1:length(p.values.calibrated)),xlab="Loci Position")
 #order(simu$causal)
 #simu$causal[1]
 #points(-log10(p.values.calibrated)[simu$causal]~simu$causal,
@@ -82,7 +133,7 @@ points(-log10(p.values.calibrated)[which(-log10(p.values.calibrated) > 3)]~which
        col="blue",pch=21,cex=2)
 abline(h = 3,col="red")
 
-## cate ####
+#### cate ####
 output.EWAS.cate <- cate(~ p.variable$V1,p.variable, t(beta.mat.NONA.varlow), r = 5,adj.method = "rr")
 
 ## tests based on GLMs
@@ -109,7 +160,8 @@ abline(h = 4,col="red")
 
 
 
-## Taking global methylation means on non-trimed data vs trimmed data
+
+#### Taking global methylation means on non-trimed data vs trimmed data ####
 
 tot.count<-read.table("DATA/Empirical_Data/baboon_example/BSSeq_Baboon/counts_chr5_n50.txt",header = T,row.names = 1)
 m.count<-read.table("DATA/Empirical_Data/baboon_example/BSSeq_Baboon/mcounts_chr5_n50.txt",header=T,row.names = 1)
@@ -121,9 +173,49 @@ beta.mat.NOz[is.infinite(beta.mat.NOz)] = 1
 testing.mean.Est<-apply(beta.mat.NOz,1,mean)
 hist(testing.mean.Est)
 global.mean5<-mean(testing.mean.Est)
+length(testing.mean.Est)
 global.sd5<-sd(testing.mean.Est)
 
 #global.methylation.baboon<-data.frame(chrom=c(1:5),mean=rep(NA,5),sd=rep(NA,5))
 global.methylation.baboon[2,2:3]<-c(global.mean2,global.sd2)
 
+#### Taking single chrom1 data and inputting into EWAS_Generator Sim ####
+
+source(file = "ewas_generator.R")
+
+dim(tot.count)
+dim(m.count)
+dim(p.variable)
+dim(relate.mat)
+dim(cov.mat)
+
+p.value<-1000
+K.value<-7
+sample(e.m$Predictor,size=p,replace = F)
+dim(beta.mat.NONA.varlow)
+mean.loci.beta<-apply(beta.mat.NONA.varlow,1,mean)
+
+simu.rv <- ewas_generator(n = 50, 
+                       p = p.value, 
+                       K = K.value, 
+                       freq=unname(sample(mean.loci.beta,size=p.value,replace = F)),
+                       prop.variance = 0.1,
+                       sd.U = runif(K.value),
+                       mean.B = 5,
+                       sd.B = 0.3,
+                       sd.V = 0.1,
+                       sigma = .1)
+                       #setSeed = 5)
+
+#### Simple run (lfmm) of revised ewas_sim ####
+library(cate)
+(K <- est.confounder.num(~ X, simu.rv,Y = simu.rv$Y, method = "ed"))
+head(simu.rv$Y)
+
+data <- gen.sim.data(n = 50, p = 100, r = 5)
+X.data <- data.frame(X1 = data$X1)
+dim(X.data)
+dim(data$Y)
+est.confounder.num(~ X1, X.data, data$Y, method = "ed")
+head(data$Y)
 
