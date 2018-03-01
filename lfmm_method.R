@@ -37,6 +37,7 @@ simu$causal
 
 ## run EWAS (LFMM) with true K
 mod <- lfmm::lfmm_ridge(simu$Y, simu$X, K = 6)
+?lfmm_ridge()
 
 ## tests based on GLMs
 p.value <- NULL

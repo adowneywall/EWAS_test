@@ -19,7 +19,7 @@ dim(cov.mat)
 ## beta-values and trimming data ####
 beta<-m.count/tot.count
 beta.mat<-as.matrix(beta)
-
+write.table(x = beta.mat, file = "DATA/Empirical_Data/baboon_example/BSSeq_Baboon/betaval_chr1_n50.txt",sep="")
 ## Useful function for finding rowxcol of nans or infinites
 #which(is.infinite(beta.mat.NOz), arr.ind=TRUE)
 

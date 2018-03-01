@@ -44,6 +44,8 @@ simu <- ewas_generator(n = 200,
 ### estimating latent factors
 est.confounder.num(~ X, simu, simu$Y, method = "ed")
 est.confounder.num(~ X, simu, simu$Y, method = "bcv",nRepeat = 10)
+dim(simu$X)
+dim(simu$Y)
 
 ### Estimating confounders based on sva package
 num_sv     <- sva::num.sv(dat = t(simu$Y), mod = simu$X, method = "be")
@@ -52,7 +54,7 @@ num_sv_l   <- sva::num.sv(dat = t(simu$Y), mod = simu$X, method = "leek")
 #output.EWAS <- cate(~ simu$X,simu, simu$Y, r = 0, adj.method = "naive")
 output.EWAS.cate <- cate(~ simu$X,simu, simu$Y, r = 20)
 output.EWAS.cate <- cate(~ simu$X,simu, simu$Y, r = 6,adj.method = "rr")
-
+cate(formula = ,X.data = ,Y = ,r = K,adj.method = "rr")
 ## tests based on GLMs
 p.value.cate <- NULL
 z.score.cate <- NULL
