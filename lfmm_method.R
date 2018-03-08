@@ -57,6 +57,14 @@ plot(-log10(p.value))
 #which(-log10(p.value) > 3) %in% simu$causal)
 
 # plot calibrated pvalues
+library(fdrtool)
+fdrtool(z.score,statistic = c("normal")) 
+# instead of using genomic inflation factor the eta0 can be used for evaluating the 
+# perfomance of each method
+fdrtool(p.value,statistic = c("pvalue"))
+
+plot(density(abs(z.score)))
+
 gif <- median(z.score^2)/0.456
 p.values.calibrated <- pchisq(z.score^2/gif , df = 1, low = F)
 hist(p.values.calibrated)

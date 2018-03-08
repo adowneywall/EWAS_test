@@ -19,6 +19,7 @@ dim(cov.mat)
 ## beta-values and trimming data ####
 beta<-m.count/tot.count
 beta.mat<-as.matrix(beta)
+
 write.table(x = beta.mat, file = "DATA/Empirical_Data/baboon_example/BSSeq_Baboon/betaval_chr1_n50.txt",sep="")
 ## Useful function for finding rowxcol of nans or infinites
 #which(is.infinite(beta.mat.NOz), arr.ind=TRUE)
@@ -26,7 +27,7 @@ write.table(x = beta.mat, file = "DATA/Empirical_Data/baboon_example/BSSeq_Baboo
 ## Currently removes all CpGs with any NAs - this may need to be revised!@!
 proportion.NA<-function(x){sum(is.na(x))/50}
 testing.NA<-apply(beta.mat,1,proportion.NA)
-plot(density(testing.NA))
+hist(testing.NA)
 beta.mat.NONA<-beta.mat[testing.NA == 0.00,]
 dim(beta.mat.NONA)
 
@@ -34,8 +35,13 @@ dim(beta.mat.NONA)
 
 ## Removes CpGs with high (>0.9) or low (<0.1) mean methylation
 testing.mean<-apply(beta.mat.NONA,1,mean)
-
 hist(testing.mean)
+length((which(testing.mean <= 0.1 | testing.mean >= 0.9 )))/length(testing.mean) # removing approximate 2.5% of loci
+mean(testing.mean)
+# mean of chr 1 of baboon data = 0.6064
+sd(testing.mean) 
+# sd of chr 1 of baboon data = .2624
+
 beta.mat.NONA.var<-beta.mat.NONA[testing.mean > 0.1 & testing.mean < 0.9,]
 dim(beta.mat.NONA.var)
 
@@ -179,6 +185,45 @@ global.sd5<-sd(testing.mean.Est)
 #global.methylation.baboon<-data.frame(chrom=c(1:5),mean=rep(NA,5),sd=rep(NA,5))
 global.methylation.baboon[2,2:3]<-c(global.mean2,global.sd2)
 
+
+## Currently removes all CpGs with any NAs - this may need to be revised!@!
+proportion.NA<-function(x){sum(is.na(x))/50}
+testing.NA<-apply(beta.mat,1,proportion.NA)
+hist(testing.NA)
+beta.mat.NONA<-beta.mat[testing.NA == 0.00,]
+dim(beta.mat.NONA)
+
+baboon.file.names<-list.files(path = "DATA/Empirical_Data/baboon_example/BSSeq_Baboon/",pattern = "counts*")
+chrom.label<-NULL
+mean.chrom<-NULL
+sd.chrom<-NULL
+for (i in 1:20){
+  tot.count<-read.table(paste("DATA/Empirical_Data/baboon_example/BSSeq_Baboon/",baboon.file.names[i],sep = ""),header = T,row.names = 1)
+  m.count<-read.table(paste("DATA/Empirical_Data/baboon_example/BSSeq_Baboon/",baboon.file.names[(20+i)],sep = ""),header=T,row.names = 1)
+  beta<-m.count/tot.count
+  beta.mat<-as.matrix(beta)
+  proportion.NA<-function(x){sum(is.na(x))/50}
+  testing.NA<-apply(beta.mat,1,proportion.NA)
+  beta.mat.NONA<-beta.mat[testing.NA == 0.00,]
+  
+  ## Removes CpGs with high (>0.9) or low (<0.1) mean methylation
+  testing.mean<-apply(beta.mat.NONA,1,mean)
+
+  chrom.label<-c(chrom.label,baboon.file.names[i])
+  mean.chrom<-c(mean.chrom,mean(testing.mean))
+  sd.chrom<-c(sd.chrom,sd(testing.mean))
+}
+chromGlobalMethyl<-data.frame(chrom.label = chrom.label, mean.chrom = mean.chrom, sd.chrom = sd.chrom)
+### mean methylation is remarkable consistent in both mean and sd between all chromosomes
+#EX
+# chrom.label mean.chrom  sd.chrom
+# 1   counts_chr1_n50.txt  0.6063702 0.2623622
+# 2  counts_chr10_n50.txt  0.6146495 0.2561920
+# 3  counts_chr11_n50.txt  0.6240210 0.2553796
+# 4  counts_chr12_n50.txt  0.5993940 0.2691549
+
+
+
 #### Taking single chrom1 data and inputting into EWAS_Generator Sim ####
 
 source(file = "ewas_generator.R")
@@ -218,4 +263,10 @@ dim(X.data)
 dim(data$Y)
 est.confounder.num(~ X1, X.data, data$Y, method = "ed")
 head(data$Y)
+
+
+
+
+
+
 

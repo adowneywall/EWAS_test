@@ -217,3 +217,42 @@ sub.list<-subset(sim.list,sim.list$mean.B == 4)
 simRange<-sub.list$X
 
 SimTest02<-simTest(SimRun,simRange,sim.list,K.est = T,lfmm.test =T,cate.test = T,RFEM.test=T)
+
+SimTest02.list<-sim.list[simRange,]
+SimTest02PerfOut.lfmm<-merge(SimTest02.list,data.frame(SimTest02$lfmm.performance),by.x=c("X"),by.y=c("X1"))
+
+# error
+plotlfmm <- ggplot(SimTest02PerfOut.lfmm,aes(x=prop.variance,y=X2,colour=as.factor(p))) 
+plotlfmm + geom_line() + geom_point() + facet_grid(.~as.factor(n))
+# power
+plotlfmm <- ggplot(SimTest02PerfOut.lfmm,aes(x=prop.variance,y=X3,colour=as.factor(p))) 
+plotlfmm + geom_line() + geom_point() + facet_grid(.~as.factor(n))
+
+## All models
+lfmm.o<-cbind("lfmm",data.frame(SimTest02$lfmm.performance)) 
+cate.o<-cbind("cate",data.frame(SimTest02$cate.performance))
+RFEM.o<-cbind("RFEM",data.frame(SimTest02$RFEM.performance))
+coln<-c("test","sim","error","power")
+colnames(lfmm.o)<-coln
+colnames(cate.o)<-coln
+colnames(RFEM.o)<-coln
+
+SimT02.perf<-rbind(lfmm.o,cate.o,RFEM.o)
+SimTest02PerfOut.mutl<-merge(SimTest02.list,SimT02.perf,by.x=c("X"),by.y=c("sim"))
+SimT.multi<-subset(SimTest02PerfOut.mutl,SimTest02PerfOut.mutl$p == 5000)
+
+plotlfmm <- ggplot(SimT.multi,aes(x=prop.variance,y=error,colour=as.factor(test))) 
+plotlfmm + geom_line() + geom_point() + facet_grid(.~as.factor(n))
+
+
+
+plotlfmm <- ggplot(SimT.multi,aes(x=prop.variance,y=X2,colour=as.factor(p),shape=as.factor(mean.B),
+                                             group = interaction(as.factor(p),as.factor(mean.B)))) 
+plotlfmm + geom_line() + geom_point() + facet_grid(.~as.factor(n))
+
+
+
+
+
+
+
