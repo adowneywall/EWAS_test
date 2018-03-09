@@ -60,6 +60,7 @@ ewas_generator <- function (n,
   return(list(Y = Y, #beta values
               Y.raw = Y.raw,
               freq = freq,
+              Epsilon=Epsilon,
               M = M,
               X = X, #phenotype
               causal = outlier, #set of causal loci
@@ -72,12 +73,80 @@ ewas_generator <- function (n,
               )
          )
 }
+
+ewas_generator2 <- function (n, 
+                            p, 
+                            K, 
+                            freq = NULL,
+                            prop.causal = 0.025,  # proportion of loci that are causal
+                            prop.variance = 0.6,  # intensity of confounding
+                            sigma = 0.2, # standard deviation of residual errors
+                            sd.B = 1.0,  # standard deviation of effect size
+                            mean.B = 5.0, # mean effect size
+                            sd.U = 1.0, # standard deviation for factors
+                            sd.V = 1.0, # sd.V standard deviations for loadings
+                            setSeed=NULL) 
+{
+  set.seed(setSeed)
+  outlier <- sample.int(p, prop.causal * p)
+  outlier.nb = length(outlier)
+  
+  if (is.null(freq)) freq <- runif(p)
+  cs <- runif(K, min = -1, max = 1)
+  theta <- sqrt(prop.variance/sum((cs/sd.U)^2))
+  
+  Sigma <- diag(x = sd.U^2, nrow = K, ncol = K) # Identity matrix with standard deviation along diagonal
+  Sigma <- rbind(Sigma, matrix(cs*theta, nrow = 1))
+  Sigma <- cbind(Sigma, matrix(c(cs*theta, 1), ncol = 1))
+  covar.mat<-Sigma
+  
+  UX <- MASS::mvrnorm(n, mu = rep(0, K + 1), Sigma = Sigma)
+  U <- UX[, 1:K, drop = FALSE]
+  X <- UX[, K + 1, drop = FALSE]
+  V <- MASS::mvrnorm(p, mu = rep(0, K), Sigma = sd.V^2 * diag(K))
+  B <- matrix(0, p, 1)
+  B[outlier, 1] <- rnorm(outlier.nb, mean.B, sd.B)
+  
+  Epsilon = MASS::mvrnorm(n, mu = rep(0, p), Sigma = sigma^2 * diag(p))
+  
+  Z = U %*% t(V) + X %*% t(B) + Epsilon
+  scaling<-function(x){return(0 + (x[,2] - mean(x[,2])) * (1/sd(x[,2])))}
+  Z.scale<-0 + (sim1$Z[,2] - mean(Z[,2])) * (1/sd(Z[,2]))
+  Y = 
+  return(list(Y = Y, #beta values
+              freq = freq,
+              Epsilon=Epsilon,
+              X = X, #phenotype
+              causal = outlier, #set of causal loci
+              covar.mat = covar.mat, #covariance matrix
+              U = U, #simulated confounders
+              V = V, #loadings
+              B = B,  #effect sizes
+              Z= Z, #matrix of variation
+              freq = freq #mean methylation values
+  )
+  )
+}
+dim(sim1$Z)
+hist(sim1$Z[,2])
+sd(sim1$Z[,2])
+sim1$Z[,2]
+nm<-0 + (sim1$Z[,2] - mean(sim1$Z[,2])) * (1/sd(sim1$Z[,2]))
+hist(nm)
+?rnorm()
+nm.p<-pnorm(nm)
+hist(pnorm(nm))
+hist(qbeta(nm.p,.1,10))
 par(mfrow = c(2,2))
 sim1<-ewas_generator(50,1000,5,mean.B=1,freq = rep(0.6,1000))
 hist(sim1$Y)
 mean(sim1$Y)
 dim(sim1$Z)
 
+hist(pnorm(sim1$Y.raw))
+hist(pnorm(sim1$Y.raw[1:10,1:10]))
+?pnorm()
+hist(sim1$Y)
 sim1<-ewas_generator(50,1000,5,mean.B=1,freq = sample(x = adj.quercus.means,size = 1000 ,replace=T)) #,freq = rnorm(1000,mean = 0,sd = 1))
 hist(apply(sim1$Z,2,function(x)mean(x)))
 hist(apply(sim1$M,2,function(x)mean(x)))
@@ -86,20 +155,10 @@ hist(sim1$freq)
 head(sim1$M)
 hist(apply(sim1$Y.raw,2,function(x)mean(x)))
 hist(apply(pnorm(sim1$Y.raw),2,function(x)mean(x)))
-hist(sim1$Y)
+hist(sim1$Y[,1000])
+dim(sim1$Y)
+hist(rowMeans(t(sim1$Y)),breaks = 20)
 
-sim2<-ewas_generator(50,1000,5)
-hist(sim2$Y)
-mean(sim2$Y)
-sum(is.na(sim2$Y))
-
-sim3<-ewas_generator(50,1000,5,mean.B=1,sd.B = 0.01,sd.U = 0.01,sd.V = 0.01)
-hist(sim3$Y)
-mean(sim3$Y)
-#Number Na
-(numNA<-sum(is.na(sim3$Y))/length(sim3$Y))
-#Number
-length(which(sim3$Y<0.01))/length(sim3$Y)
 
 # b-value sd for each individual
 sim3.n.sd<-apply(sim3$Y,1,function(x){sd(x)})

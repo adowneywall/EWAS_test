@@ -95,25 +95,95 @@ mean(q.cg.means.lowNA[which(q.cg.means.lowNA >= LVT & q.cg.means.lowNA <= UVT)])
 paste(dim(q.cg.lowvarOmit)[1],"probes remaining after probes with low variation removed") #12980 probes remaining
 hist(q.cg.lowvarOmit)
 
-
-# removes sd with greater than var of 0
-q.cg.sd<-apply(q.cg.lowvarOmit,1,function(x){sd((x))})
+# removes sd with greater than var of 0.01 (not currently doing this)
+q.cg.sd<-apply(q.cg.lowvarOmit,1,function(x){sd(x,na.rm=T)})
 #q.cg.lowvarOmit<-q.cg.lowvarOmit[which(q.cg.sd > 0.01),]
-hist(apply(q.cg.lowvarOmit,1,function(x){sd((x))}))
+hist(apply(q.cg.lowvarOmit,1,function(x){sd(x,na.rm=T)}))
+plot(density(q.cg.lowvarOmit[1,],na.rm=T))
+N<-2
+M<-100
+for(i in N:M){
+  #plot(density(q.cg.lowvarOmit[i,],na.rm=T),main=paste(i))
+  hist(q.cg.lowvarOmit[i,],na.rm=T,main=paste(i))
+}
+hist(q.cg.lowvarOmit[74,])
+## Suggesting probe beta-values are not normal...
+shapiro.test(q.cg.lowvarOmit[8,])
+library(nortest)
+pearson.test(q.cg.lowvarOmit[8,])
+ks.test(q.cg.lowvarOmit[8,])
 
+
+### fitting different distributions to data
+
+x <- rbeta(100,0.1,10)
+hist(x,breaks=100)
+## now do this directly with more control.
+store<-fitdistr(x,densfun = "beta", list(shape1 = 1, shape2 = 10), lower = 0.001)
+store2<-fitdist(x,"beta")
+store2
+gofstat(store2)
+new.dist<-rbeta(1000,0.1101489,7.0510089)
+hist(new.dist,breaks=100)
+
+mean(q.cg.lowvarOmit[,20],na.rm=T)
+# Creat data fram of probe means and sds
 quercus.var.df<-data.frame(mean=adj.quercus.means,sd=q.cg.sd)
+library(fitdistrplus)
+gofstat(q.cg.lowvarOmit[20,])
+hold<-rbeta(10000,10,1)
+mean(hold)
+(10+1)/10
+(10*1)/((10+1)^2*(10+1+1))
+hist(rbeta(10000,10,1),breaks=1000)
 
-
-## Variance distribution across mean bins
+min(rbeta(1000,10,1))
+?rbeta()
+## Variance distribution across mean bins w/ quercus dataset
 bins<-seq(from=0,to=1,by=(1/20))
 sd.means<-NULL
 for(i in 1: (length(bins)-1)){
   print(i)
   temp.b<-which(quercus.var.df$mean>bins[i] & quercus.var.df$mean<=bins[i+1])
-  temp.mat<-q.cg.lowvarOmit[temp.b,]
-  dim(temp.mat)
-  sd.means<-c(sd.means,mean(apply(temp.mat,1,function(x){sd(x,na.rm=TRUE)})))
+  sd.means<-c(sd.means,mean(quercus.var.df$sd[temp.b]))
 }
 plot(sd.means~c(as.factor(paste(bins[1:20],"-",bins[2:21]))))
+hist(quercus.var.df$mean)
+hist(quercus.var.df$sd)
 
-subset(quercus.var.df,quercus.var.df$mean>X & quercus.var.df,quercus.var.df$mean<=Y )
+
+
+## Variance distributino across mean bins w/ simulation data
+sim1<-ewas_generator(50,2000,5,
+                     freq = sample(x = adj.quercus.means,size = 2000 ,replace=T))
+sim1<-ewas_generator(50,1000,5,mean.B=1,freq = NULL)
+bins<-seq(from=0,to=1,by=(1/20))
+sd.means<-NULL
+mean.sim<-rowMeans(t(sim1$Y))
+sd.sim<-apply(t(sim1$Y),1,function(x){sd(x,na.rm=TRUE)})
+sim.df<-data.frame(mean=mean.sim,sd=sd.sim)
+
+for(i in 1:(length(bins)-1)){
+  print(i)
+  temp.b<-which(sim.df$mean>bins[i] & sim.df$mean<=bins[i+1])
+  sd.means<-c(sd.means,mean(sim.df[temp.b,2]))
+  }
+plot(sd.means~as.factor(bins[2:21]))
+hist(sim.df$mean,breaks=20)     
+hist(sim.df$sd)
+
+range<-sample(1:nrow(quercus.var.df),1000,replace = T)
+freq<-sample_n(quercus.var.df,10,replace = T)
+freq[1,1]
+freq$mean
+
+hist(sim1$M)
+dim(sim1$Epsilon)
+sim1$Epsilon[1:10,1:10]
+hist(sim1$freq)
+
+hold<-sim1$freq[1]+sim1$Z[3,]
+hist(sim1$Z[2,])
+mean(hold)
+mean(sim1$Z[2,])
+

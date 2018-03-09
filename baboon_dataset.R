@@ -24,14 +24,32 @@ write.table(x = beta.mat, file = "DATA/Empirical_Data/baboon_example/BSSeq_Baboo
 ## Useful function for finding rowxcol of nans or infinites
 #which(is.infinite(beta.mat.NOz), arr.ind=TRUE)
 
+hist(beta.mat[1,],rm.na=T)
+hist(beta.mat)
+max(beta.mat)
 ## Currently removes all CpGs with any NAs - this may need to be revised!@!
 proportion.NA<-function(x){sum(is.na(x))/50}
 testing.NA<-apply(beta.mat,1,proportion.NA)
 hist(testing.NA)
 beta.mat.NONA<-beta.mat[testing.NA == 0.00,]
 dim(beta.mat.NONA)
+hist(beta.mat.NONA,rm.na=T)
+# Removing non sensical beta-values (those above 1)
+max.list<-apply(beta.mat.NONA,1,function(x){max(x)})
+beta.mat.NONA<-beta.mat.NONA[-c(which(max.list > 1)),]
+hist(beta.mat.NONA)
 
-
+N<-1
+M<-100
+for(i in N:M){
+  #plot(density(q.cg.lowvarOmit[i,],na.rm=T),main=paste(i))
+  hist(beta.mat.NONA[i,],main=paste(i))
+}
+hold<-fitdist(beta.mat.NONA[76,],"beta")
+x <- rbeta(50,2,5)
+hold<-fitdist(x,"beta")
+hold$estimate
+hist(rbeta(10000,hold$estimate[1],hold$estimate[2]),breaks=50)
 
 ## Removes CpGs with high (>0.9) or low (<0.1) mean methylation
 testing.mean<-apply(beta.mat.NONA,1,mean)
