@@ -3,7 +3,7 @@
    ## Last Edit: 25-01-2018
 
 ##### Parameter Description ####
-
+library(dplyr)
 #n	number of individuals
 #p	number of response variables.
 #K	number of latent factors.
@@ -110,8 +110,9 @@ ewas_generator2 <- function (n,
   Epsilon = MASS::mvrnorm(n, mu = rep(0, p), Sigma = sigma^2 * diag(p))
   
   Z = U %*% t(V) + X %*% t(B) + Epsilon
-  scaling<-function(x){return(0 + (x[,2] - mean(x[,2])) * (1/sd(x[,2])))}
-  Z.scale<-0 + (sim1$Z[,2] - mean(Z[,2])) * (1/sd(Z[,2]))
+  #scaling<-function(x){return(0 + (x[,2] - mean(x[,2])) * (1/sd(x[,2])))}
+  #Z.scale<-0 + (sim1$Z[,2] - mean(Z[,2])) * (1/sd(Z[,2]))
+  Z.scale<-
   Y = 
   return(list(Y = Y, #beta values
               freq = freq,
@@ -127,6 +128,10 @@ ewas_generator2 <- function (n,
   )
   )
 }
+
+
+
+
 dim(sim1$Z)
 hist(sim1$Z[,2])
 sd(sim1$Z[,2])
@@ -136,7 +141,32 @@ hist(nm)
 ?rnorm()
 nm.p<-pnorm(nm)
 hist(pnorm(nm))
+hist(pnorm(sim1$Z[,2]))
+nm.p<-pnorm(sim1$Z[,2])
+
+hold<-apply(sim1$Z,1,function(x){pnorm(x)})
+hold2<-apply(hold,1,function(x,freq){fun1(x,freq)})
+hold2<-hold
+for(i in 1:1000){
+  hold2[i,]<-qbeta(hold[i,],freq[i,1],freq[i,2])
+
+}
+dim(hold2)
+hist(hold[100,])
+fun1<-function(x,y){
+  a<-sample_n(y)
+  return(qbeta(x,a[1],a[2]))
+}
+
 hist(qbeta(nm.p,.1,10))
+hist(rbeta(10000,9,.05))
+
+alpha<-c(0.1,0.5,0.5,2,9,9,9)
+beta<-c(10,10,7,7,3,.1,0.5)
+df.ab<-data.frame(alpha=alpha,beta=beta)
+
+freq<-sample_n(df.ab,1000,replace = T)
+
 par(mfrow = c(2,2))
 sim1<-ewas_generator(50,1000,5,mean.B=1,freq = rep(0.6,1000))
 hist(sim1$Y)
@@ -147,7 +177,7 @@ hist(pnorm(sim1$Y.raw))
 hist(pnorm(sim1$Y.raw[1:10,1:10]))
 ?pnorm()
 hist(sim1$Y)
-sim1<-ewas_generator(50,1000,5,mean.B=1,freq = sample(x = adj.quercus.means,size = 1000 ,replace=T)) #,freq = rnorm(1000,mean = 0,sd = 1))
+sim1<-ewas_generator(50,1000,5,mean.B=1) #,freq = sample(x = adj.quercus.means,size = 1000 ,replace=T)) #,freq = rnorm(1000,mean = 0,sd = 1))
 hist(apply(sim1$Z,2,function(x)mean(x)))
 hist(apply(sim1$M,2,function(x)mean(x)))
 mean(rowMeans(sim1$M))
@@ -179,8 +209,12 @@ sim4<-ewas_generator(50,1000,5,freq = rnorm(n = 1000,mean = 0.1,sd = 0.1))
 hist(sim4$Y)
 mean(sim4$Y)
 sum(!is.na(sim4$Y))
-#### Repetative Simulation Generator ####
 
+
+
+
+
+#### Repetative Simulation Generator ####
 ewas_test<-function(n = 200, 
           p = 1000, 
           K = 3, 
@@ -364,56 +398,3 @@ multi.sim.gen<-function(n,
 #     write.csv(x=temp.scenario$Y,file="DATA/EWAS_Sims/Hold")
 #   }
 # }
-#### Extra Code ####
-
-# simu <- ewas_generator(n = 10000, 
-#                        p = 100, 
-#                        K = 5, 
-#                        prop.variance = .99,
-#                        sd.U = c(.05,.05,.05,.05,.05),
-#                        mean.B = 5,
-#                        sd.B = 0.01,
-#                        sd.V = 0.1,
-#                        sigma = .1)
-# 
-# 
-# cov2cor(simu$covar.mat)
-# summary(lm( simu$X ~ simu$U))
-# library(Rarity)
-# #pairs(cbind(simu$U,simu$X))
-# corPlot(cbind(simu$U,simu$X),method = "spearman")
-# 
-# hold<-seq(from=0,to=1,by=.01)
-# 
-# theta.confound.var<-sqrt(hold/sum((0.1/0.5)^2))
-# plot(theta.confound.var~hold,type="l",xlab="degree of confounding",ylab="theta")
-# 
-# theta.csvar<-sapply(hold,function(x){sqrt(1/sum((x/0.5)^2))})
-# plot(theta.csvar~hold,type="l",xlab="value of casual loci",ylab="theta")
-# 
-# theta.sdvar<-sapply(hold,function(x){sqrt(1/sum((.5/x)^2))})
-# plot(theta.csvar~hold,type="l",xlab="sd of casual loci",ylab="theta")
-# 
-# hold*theta.confound.var
-# 
-# simu$B
-# simu$causal
-# 
-# mod.glm <- glm(simu$Y[,201] ~ simu$X + simu$U,model = )
-# plot(simu$Y[,201] ~ simu$X + simu$U)
-# summary(mod.glm)
-# simu$B[803]
-# simu$V[803,]
-# mod.glm2 <- glm(simu$Y[,803] ~ simu$X + simu$U[,c(1,7)],
-#                family=binomial(link = "probit"))
-# mod.glm2 <- glm(simu$Y[,803] ~ .,
-#                 data = data.frame(simu$X,simu$U),
-#                 family=binomial(link = "probit"))
-# plot(simu$Y[,803]~simu$X)
-# summary(mod.glm2)
-# 
-# (Sigma <- diag(x = sd.U^2, nrow = K, ncol = K))
-# Sigma <- rbind(Sigma, matrix(cs*theta, nrow = 1))
-# Sigma <- cbind(Sigma, matrix(c(cs*theta, 1), ncol = 1))
-# UX <- MASS::mvrnorm(n, mu = rep(0, K + 1), Sigma = Sigma)
-# U <- UX[, 1:K, drop = FALSE]
