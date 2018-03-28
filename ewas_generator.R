@@ -16,7 +16,32 @@ library(dplyr)
 #sd.U (vector) standard deviations for factors.
 #sd.V	standard deviations for loadings.
 
-#### EWAS Generator #### 
+#### EWAS Generator ####
+
+adj.quercus.means<-read.csv("DATA/Empirical_Data/quercus_example/quercus_meanbvalues.csv")$x
+quercus.bvalues<-read.csv("DATA/Empirical_Data/quercus_example/processed_CpG_bvalues.csv")
+dim(quercus.bvalues)
+N.NUM = 50
+P.NUM = 2000
+
+sim_empiricalMean<-ewas_generator(N.NUM,P.NUM,5,sd.U = 1,sd.V=1,sigma=1,freq = sample(x = adj.quercus.means,size = P.NUM ,replace=F)) 
+sim1_randMean<-ewas_generator(N.NUM,P.NUM,5,sd.U = 1,sd.V=1,sigma=1,freq = NULL)
+# Ploting histograms for loci between N and M
+par(mfrow = c(2,3))
+N<-2
+M<-100
+for(i in N:M){
+  locus = sample(which(adj.quercus.means %in% sim_empiricalMean$freq[i]),1)
+  locus.bvalues = as.numeric(quercus.bvalues[locus,!is.na(quercus.bvalues[locus,])])
+  
+  hist(sim_empiricalMean$Y[,i],xlim = c(0,1),breaks=20,main=paste("Empirical Gen. Mean. Loci ",i,sep=""))
+  hist(locus.bvalues,xlim = c(0,1),breaks=20,main=paste("Empiricial Data. Loci ",i,sep=""))
+  hist(sim1_randMean$Y[,i],xlim = c(0,1),breaks=20,main=paste("Random Mean. Loci ",i,sep=""))
+  
+  hist(sim_empiricalMean$Y.collapse[,i],xlim = c(0,1),breaks=20,main=paste("Empiricial Gen. Mean w/ collapsed beta-value. Loci ",i,sep=""))
+  hist(locus.bvalues,xlim = c(0,1),breaks=20,main=paste("Locus",locus,", bval.mean =",sim_empiricalMean$freq[i]))
+  hist(sim1_randMean$Y.collapse[,i],xlim = c(0,1),breaks=20,main=paste("Random Mean w/ collapsed beta-value. Loci ",i,sep=""))
+}
 
 ewas_generator <- function (n, 
                             p, 
@@ -24,7 +49,7 @@ ewas_generator <- function (n,
                             freq = NULL,
                             prop.causal = 0.025,  # proportion of loci that are causal
                             prop.variance = 0.6,  # intensity of confounding
-                            sigma = 0.2, # standard deviation of residual errors
+                            sigma = 0.2/10, # standard deviation of residual errors
                             sd.B = 1.0,  # standard deviation of effect size
                             mean.B = 5.0, # mean effect size
                             sd.U = 1.0, # standard deviation for factors
@@ -54,13 +79,15 @@ ewas_generator <- function (n,
   Epsilon = MASS::mvrnorm(n, mu = rep(0, p), Sigma = sigma^2 * diag(p))
   
   Z = U %*% t(V) + X %*% t(B) + Epsilon
-  M <- matrix(rep(qnorm(freq),n) , nrow = n, byrow = T)
+  M = matrix(rep(qnorm(freq),n) , nrow = n, byrow = T)
   Y.raw = M + Z
   Y = pnorm(Y.raw)
+  Y.collapse = apply(Y,2,function(x){collapse(x)})
   return(list(Y = Y, #beta values
-              Y.raw = Y.raw,
-              freq = freq,
-              Epsilon=Epsilon,
+              Y.raw = Y.raw, # beta-values before pnorm adjustment
+              Y.collapse = Y.collapse, # beta-values collapsed into a 0-0.5 or 1-0.5 range
+              freq = freq, # Vector of the selected beta-value means
+              Epsilon=Epsilon, 
               M = M,
               X = X, #phenotype
               causal = outlier, #set of causal loci
@@ -68,10 +95,20 @@ ewas_generator <- function (n,
               U = U, #simulated confounders
               V = V, #loadings
               B = B,  #effect sizes
-              Z= Z, #matrix of variation
+              Z = Z, #matrix of variation
               freq = freq #mean methylation values
               )
          )
+}
+
+collapse<-function(x){
+  if(median(x)>= 0.5){
+    x[x<0.5]<-(1-x[x<0.5])
+  }
+  else{
+    x[x>=0.5]<-(1-x[x>=0.5])
+  }
+  return(x)
 }
 
 ewas_generator2 <- function (n, 
@@ -130,15 +167,18 @@ ewas_generator2 <- function (n,
 }
 
 
+## Examining the distribution of beta values for individual probes based on simulation
+sim1<-ewas_generator(50,1000,5) # simple simulation
+dim(sim1$Z) # [individuals (n), loci (p)] 
+hist(sim1$Z[,2]) #histogram of second locus - normally distributed variation around the mean
+sd(sim1$Z[,2]) # standard deviation of second locus
 
+hist(sim1$Y[,2]) #histogram of second locus - beta-values determined based on variance structure outlined by user in model
+sd(sim1$Y[,2])
 
-dim(sim1$Z)
-hist(sim1$Z[,2])
-sd(sim1$Z[,2])
-sim1$Z[,2]
+## Examining the distribution of beta values for individual probes based on simulation
+
 nm<-0 + (sim1$Z[,2] - mean(sim1$Z[,2])) * (1/sd(sim1$Z[,2]))
-hist(nm)
-?rnorm()
 nm.p<-pnorm(nm)
 hist(pnorm(nm))
 hist(pnorm(sim1$Z[,2]))
@@ -169,20 +209,11 @@ freq<-sample_n(df.ab,1000,replace = T)
 
 par(mfrow = c(2,2))
 sim1<-ewas_generator(50,1000,5,mean.B=1,freq = rep(0.6,1000))
-hist(sim1$Y)
-mean(sim1$Y)
-dim(sim1$Z)
-
-hist(pnorm(sim1$Y.raw))
-hist(pnorm(sim1$Y.raw[1:10,1:10]))
-?pnorm()
-hist(sim1$Y)
 sim1<-ewas_generator(50,1000,5,mean.B=1) #,freq = sample(x = adj.quercus.means,size = 1000 ,replace=T)) #,freq = rnorm(1000,mean = 0,sd = 1))
 hist(apply(sim1$Z,2,function(x)mean(x)))
 hist(apply(sim1$M,2,function(x)mean(x)))
 mean(rowMeans(sim1$M))
-hist(sim1$freq)
-head(sim1$M)
+
 hist(apply(sim1$Y.raw,2,function(x)mean(x)))
 hist(apply(pnorm(sim1$Y.raw),2,function(x)mean(x)))
 hist(sim1$Y[,1000])

@@ -88,6 +88,7 @@ LVT<-0.01
 q.cg.lowvarOmit<-q.cg.NAomit[which(q.cg.means.lowNA >= LVT & q.cg.means.lowNA <= UVT),]
 # hist of mean prob vals after very high and low var removed
 adj.quercus.means<-q.cg.means.lowNA[which(q.cg.means.lowNA >= LVT & q.cg.means.lowNA <= UVT)]
+write.csv(file="DATA/Empirical_Data/quercus_example/quercus_meanbvalues.csv",adj.quercus.means,row.names = F)
 hist(adj.quercus.means)
 hist(sample(x =adj.quercus.means,size =1000 ,replace=T))
 # mean of mean prob value after v. high and low var removed
@@ -100,45 +101,29 @@ q.cg.sd<-apply(q.cg.lowvarOmit,1,function(x){sd(x,na.rm=T)})
 #q.cg.lowvarOmit<-q.cg.lowvarOmit[which(q.cg.sd > 0.01),]
 hist(apply(q.cg.lowvarOmit,1,function(x){sd(x,na.rm=T)}))
 plot(density(q.cg.lowvarOmit[1,],na.rm=T))
+write.csv(file="DATA/Empirical_Data/quercus_example/processed_CpG_bvalues.csv",q.cg.lowvarOmit,row.names = F)
+
+# Ploting histograms for loci between N and M
 N<-2
 M<-100
 for(i in N:M){
   #plot(density(q.cg.lowvarOmit[i,],na.rm=T),main=paste(i))
   hist(q.cg.lowvarOmit[i,],na.rm=T,main=paste(i))
 }
-hist(q.cg.lowvarOmit[74,])
+
 ## Suggesting probe beta-values are not normal...
-shapiro.test(q.cg.lowvarOmit[8,])
+
+# libraries
 library(nortest)
-pearson.test(q.cg.lowvarOmit[8,])
-ks.test(q.cg.lowvarOmit[8,])
+library(fitdistrplus)
 
 
-### fitting different distributions to data
+shapiro.test(q.cg.lowvarOmit[8,]) #not normal
+pearson.test(q.cg.lowvarOmit[8,]) #not normal
 
-x <- rbeta(100,0.1,10)
-hist(x,breaks=100)
-## now do this directly with more control.
-store<-fitdistr(x,densfun = "beta", list(shape1 = 1, shape2 = 10), lower = 0.001)
-store2<-fitdist(x,"beta")
-store2
-gofstat(store2)
-new.dist<-rbeta(1000,0.1101489,7.0510089)
-hist(new.dist,breaks=100)
-
-mean(q.cg.lowvarOmit[,20],na.rm=T)
 # Creat data fram of probe means and sds
 quercus.var.df<-data.frame(mean=adj.quercus.means,sd=q.cg.sd)
-library(fitdistrplus)
-gofstat(q.cg.lowvarOmit[20,])
-hold<-rbeta(10000,10,1)
-mean(hold)
-(10+1)/10
-(10*1)/((10+1)^2*(10+1+1))
-hist(rbeta(10000,10,1),breaks=1000)
 
-min(rbeta(1000,10,1))
-?rbeta()
 ## Variance distribution across mean bins w/ quercus dataset
 bins<-seq(from=0,to=1,by=(1/20))
 sd.means<-NULL
@@ -148,7 +133,7 @@ for(i in 1: (length(bins)-1)){
   sd.means<-c(sd.means,mean(quercus.var.df$sd[temp.b]))
 }
 plot(sd.means~c(as.factor(paste(bins[1:20],"-",bins[2:21]))))
-hist(quercus.var.df$mean)
+hist(quercus.var.df$mean,breaks=20)
 hist(quercus.var.df$sd)
 
 
@@ -156,9 +141,22 @@ hist(quercus.var.df$sd)
 ## Variance distributino across mean bins w/ simulation data
 sim1<-ewas_generator(50,2000,5,
                      freq = sample(x = adj.quercus.means,size = 2000 ,replace=T))
-sim1<-ewas_generator(50,1000,5,mean.B=1,freq = NULL)
+sim1<-ewas_generator(50,2000,5,sd.U = 0.1,sd.V=0.1,sigma=.3) #freq = sample(x = adj.quercus.means,size = 2000 ,replace=T)
+hist(adj.quercus.means)
+
 bins<-seq(from=0,to=1,by=(1/20))
 sd.means<-NULL
+
+N<-2
+M<-100
+for(i in N:M){
+  #plot(density(q.cg.lowvarOmit[i,],na.rm=T),main=paste(i))
+  hist(sim1$Y.collapse[i,],na.rm=T,main=paste(i))
+}
+
+hist(sim1$Y[5,])
+hist(sim1$Y.collapse[5,])
+max(sim1$Y.collapse[5,])
 mean.sim<-rowMeans(t(sim1$Y))
 sd.sim<-apply(t(sim1$Y),1,function(x){sd(x,na.rm=TRUE)})
 sim.df<-data.frame(mean=mean.sim,sd=sd.sim)
@@ -171,6 +169,17 @@ for(i in 1:(length(bins)-1)){
 plot(sd.means~as.factor(bins[2:21]))
 hist(sim.df$mean,breaks=20)     
 hist(sim.df$sd)
+
+
+# distribution of loci means
+#quercus
+hist(sample(x = adj.quercus.means,size = 2000 ,replace=T))
+#baboon
+hist(mean.chrom) # based on all 20 chromosoms
+#sims
+hist(sim.df$mean,breaks=20)
+
+
 
 range<-sample(1:nrow(quercus.var.df),1000,replace = T)
 freq<-sample_n(quercus.var.df,10,replace = T)

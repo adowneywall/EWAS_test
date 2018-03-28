@@ -3,6 +3,7 @@
 #devtools::install_github("bcm-uga/lfmm")
 library(cate)
 library(lfmm)
+library(Rarity)
 
 tot.count<-read.table("DATA/Empirical_Data/baboon_example/BSSeq_Baboon/counts_chr1_n50.txt",header = T,row.names = 1)
 m.count<-read.table("DATA/Empirical_Data/baboon_example/BSSeq_Baboon/mcounts_chr1_n50.txt",header=T,row.names = 1)
@@ -24,9 +25,7 @@ write.table(x = beta.mat, file = "DATA/Empirical_Data/baboon_example/BSSeq_Baboo
 ## Useful function for finding rowxcol of nans or infinites
 #which(is.infinite(beta.mat.NOz), arr.ind=TRUE)
 
-hist(beta.mat[1,],rm.na=T)
-hist(beta.mat)
-max(beta.mat)
+
 ## Currently removes all CpGs with any NAs - this may need to be revised!@!
 proportion.NA<-function(x){sum(is.na(x))/50}
 testing.NA<-apply(beta.mat,1,proportion.NA)
@@ -45,16 +44,13 @@ for(i in N:M){
   #plot(density(q.cg.lowvarOmit[i,],na.rm=T),main=paste(i))
   hist(beta.mat.NONA[i,],main=paste(i))
 }
-hold<-fitdist(beta.mat.NONA[76,],"beta")
-x <- rbeta(50,2,5)
-hold<-fitdist(x,"beta")
-hold$estimate
-hist(rbeta(10000,hold$estimate[1],hold$estimate[2]),breaks=50)
+
 
 ## Removes CpGs with high (>0.9) or low (<0.1) mean methylation
 testing.mean<-apply(beta.mat.NONA,1,mean)
 hist(testing.mean)
-length((which(testing.mean <= 0.1 | testing.mean >= 0.9 )))/length(testing.mean) # removing approximate 2.5% of loci
+length((which(testing.mean <= 0.05 | testing.mean >= 0.95 )))/length(testing.mean) # removing approximate 2.5% of loci
+
 mean(testing.mean)
 # mean of chr 1 of baboon data = 0.6064
 sd(testing.mean) 
@@ -68,10 +64,30 @@ testing.sd<-apply(beta.mat.NONA.var,1,sd)
 beta.mat.NONA.varlow<-beta.mat.NONA.var[testing.sd>quantile(testing.sd,probs = c(0.05)),]
 dim(beta.mat.NONA.varlow)
 
+dim(beta.mat.NONA.varlow)
+dim(sim1$Y)
 
+bins<-seq(from=0,to=1,by=(1/20))
+sd.means<-NULL
+mean.sim<-rowMeans(beta.mat.NONA.varlow)
+sd.sim<-apply(beta.mat.NONA.varlow,1,function(x){sd(x,na.rm=TRUE)})
+baboon.df<-data.frame(mean=mean.sim,sd=sd.sim)
 
+for(i in 1:(length(bins)-1)){
+  print(i)
+  temp.b<-which(baboon.df$mean>bins[i] & baboon.df$mean<=bins[i+1])
+  sd.means<-c(sd.means,mean(baboon.df[temp.b,2]))
+}
+plot(sd.means~as.factor(bins[2:21]))
+hist(baboon.df$mean,breaks=20)     
+hist(baboon.df$sd)
 
 #### Estimate confounders (K value)####
+
+# Basic PCA w/ scree plot 
+dim(t(beta.mat.NONA.varlow))
+pca_basic<-prcomp(t(beta.mat.NONA.varlow))
+screeplot(pca_basic,npcs = 20)
 
 ## Based on cate package
 est.confounder.num(~ V1, p.variable, t(beta.mat.NONA.varlow), method = "ed")
@@ -82,7 +98,7 @@ num_sv     <- sva::num.sv(dat = beta.mat.NONA.varlow, mod = p.variable$V1, metho
 num_sv_l   <- sva::num.sv(dat = beta.mat.NONA.varlow, mod = p.variable$V1, method = "leek")
 
 # K ####
-K<-5
+K<-2
 #### lfmm ####
 mod <- lfmm::lfmm_ridge(t(beta.mat.NONA.varlow),p.variable$V1,K = K)
 ## tests based on GLMs -- replaces lfmm_testing() function in lfmm package due to the binomial nature of data
@@ -92,7 +108,6 @@ mod <- lfmm::lfmm_ridge(t(beta.mat.NONA.varlow),p.variable$V1,K = K)
 ## Cov matrix based on lfmm latent factors and predictor
 covariance.mat<-cov(cbind(mod$U,p.variable$V1))
 cov2cor(covariance.mat)
-library(Rarity)
 corPlot(cbind(mod$U,p.variable$V1),method = "spearman")
 
 ## Total correlation (r2) between predictor and estimated latent factors
@@ -147,7 +162,6 @@ sd.effect<-apply(effect.mat.corr,2,sd)
 ### Calculating p-values based on corrected z-scores w/ genomic inflation factor (gif)
 gif <- median(z.score.corr^2)/0.456
 p.values.calibrated <- pchisq(z.score.corr^2/gif , df = 1, low = F)
-hist(p.values.calibrated)
 plot(-log10(p.values.calibrated)~c(1:length(p.values.calibrated)),xlab="Loci Position")
 #order(simu$causal)
 #simu$causal[1]
@@ -164,18 +178,36 @@ output.EWAS.cate <- cate(~ p.variable$V1,p.variable, t(beta.mat.NONA.varlow), r 
 p.value <- NULL
 z.score <- NULL
 
-for (j in 1:1000){
-  mod.glm <- glm(t(beta.mat.NONA.varlow)[,j] ~ ., 
-                 data = data.frame(p.variable$V1,output.EWAS.cate$Z),
-                 binomial(link = "probit"))
-  p.value.cate[j] <- summary(mod.glm)$coeff[2,4]
-  z.score.cate[j] <- summary(mod.glm)$coeff[2,3] 
+for (j in 1:nrow(beta.mat.NONA.varlow)){
+
+  if(max(t(beta.mat.NONA.varlow)[,j])<=1){
+    mod.glm <- glm(t(beta.mat.NONA.varlow)[,j] ~ ., 
+                   data = data.frame(p.variable$V1, output.EWAS.cate$Z),
+                   binomial(link = "probit"))
+    p.value[j] <- summary(mod.glm)$coeff[2,4]
+    z.score[j] <- summary(mod.glm)$coeff[2,3]
+    effect.mat[j,] <- summary(mod.glm)$coeff[2:(K+2),1]
+  }
+  else{
+    error.loci<-c(error.loci,j)
+  }
 }
 
-gif <- median(z.score.cate^2)/0.456 #genomic inflation factor
-p.values.calibrated.cate <- pchisq(z.score.cate^2/gif , df = 1, low = F)
-hist(p.values.calibrated.cate)
-plot(-log10(p.values.calibrated.cate)~c(1:1000),xlab="Loci Position")
+## Using FDR tool
+library(fdrtool)
+(fdr_cate_output<-fdrtool(z.score,statistic = c("normal"))) 
+fdr_cate_output$pval
+plot(-log10(fdr_cate_output$pval)~c(1:nrow(beta.mat.NONA.varlow)),xlab="Loci Position")
+#points(-log10(p.values.calibrated.cate)[simu$causal]~simu$causal,
+#       col="red",pch=16)
+points(-log10(fdr_cate_output$pval)[which(-log10(fdr_cate_output$pval) > 4)]~which(-log10(fdr_cate_output$pval) > 4),
+       col="blue",pch=21,cex=2)
+abline(h = 4,col="red")
+
+#Using standard GIF
+gif <- median(z.score^2)/0.456 #genomic inflation factor
+p.values.calibrated.cate <- pchisq(z.score^2/gif , df = 1, low = F)
+plot(-log10(p.values.calibrated.cate)~c(1:nrow(beta.mat.NONA.varlow)),xlab="Loci Position")
 #points(-log10(p.values.calibrated.cate)[simu$causal]~simu$causal,
 #       col="red",pch=16)
 points(-log10(p.values.calibrated.cate)[which(-log10(p.values.calibrated.cate) > 4)]~which(-log10(p.values.calibrated.cate) > 4),
@@ -187,21 +219,22 @@ abline(h = 4,col="red")
 
 #### Taking global methylation means on non-trimed data vs trimmed data ####
 
-tot.count<-read.table("DATA/Empirical_Data/baboon_example/BSSeq_Baboon/counts_chr5_n50.txt",header = T,row.names = 1)
-m.count<-read.table("DATA/Empirical_Data/baboon_example/BSSeq_Baboon/mcounts_chr5_n50.txt",header=T,row.names = 1)
-beta<-m.count/tot.count
-beta.mat<-as.matrix(beta)
-beta.mat.NOz<-beta.mat
-beta.mat.NOz[is.nan(beta.mat.NOz)] = 0
-beta.mat.NOz[is.infinite(beta.mat.NOz)] = 1
-testing.mean.Est<-apply(beta.mat.NOz,1,mean)
-hist(testing.mean.Est)
-global.mean5<-mean(testing.mean.Est)
-length(testing.mean.Est)
-global.sd5<-sd(testing.mean.Est)
+#Single Read
+# tot.count<-read.table("DATA/Empirical_Data/baboon_example/BSSeq_Baboon/counts_chr5_n50.txt",header = T,row.names = 1)
+# m.count<-read.table("DATA/Empirical_Data/baboon_example/BSSeq_Baboon/mcounts_chr5_n50.txt",header=T,row.names = 1)
+# beta<-m.count/tot.count
+# beta.mat<-as.matrix(beta)
+# beta.mat.NOz<-beta.mat
+# beta.mat.NOz[is.nan(beta.mat.NOz)] = 0
+# beta.mat.NOz[is.infinite(beta.mat.NOz)] = 1
+# testing.mean.Est<-apply(beta.mat.NOz,1,mean)
+# hist(testing.mean.Est)
+# global.mean5<-mean(testing.mean.Est)
+# length(testing.mean.Est)
+# global.sd5<-sd(testing.mean.Est)
 
 #global.methylation.baboon<-data.frame(chrom=c(1:5),mean=rep(NA,5),sd=rep(NA,5))
-global.methylation.baboon[2,2:3]<-c(global.mean2,global.sd2)
+#global.methylation.baboon[2,2:3]<-c(global.mean2,global.sd2)
 
 
 ## Currently removes all CpGs with any NAs - this may need to be revised!@!
@@ -212,9 +245,12 @@ beta.mat.NONA<-beta.mat[testing.NA == 0.00,]
 dim(beta.mat.NONA)
 
 baboon.file.names<-list.files(path = "DATA/Empirical_Data/baboon_example/BSSeq_Baboon/",pattern = "counts*")
-chrom.label<-NULL
+chrom<-NULL
+chrom.loc<-NULL
 mean.chrom<-NULL
 sd.chrom<-NULL
+Hi<-0.95
+Low<-0.05
 for (i in 1:20){
   tot.count<-read.table(paste("DATA/Empirical_Data/baboon_example/BSSeq_Baboon/",baboon.file.names[i],sep = ""),header = T,row.names = 1)
   m.count<-read.table(paste("DATA/Empirical_Data/baboon_example/BSSeq_Baboon/",baboon.file.names[(20+i)],sep = ""),header=T,row.names = 1)
@@ -226,12 +262,22 @@ for (i in 1:20){
   
   ## Removes CpGs with high (>0.9) or low (<0.1) mean methylation
   testing.mean<-apply(beta.mat.NONA,1,mean)
+  sd.c<-apply(beta.mat.NONA,1,function(x){sd(x,na.rm=TRUE)})
+  rm<-(-which(testing.mean <= Low | testing.mean >= Hi ))
+  reduce<-testing.mean[rm]
+  lstring<-strsplit(names(reduce),"_")
+  
+  chrom<-c(chrom,sapply(lstring,function(x){paste(x[1])}))
+  chrom.loc<-c(chrom.loc,sapply(lstring, function(x){paste(x[2])}))
 
-  chrom.label<-c(chrom.label,baboon.file.names[i])
-  mean.chrom<-c(mean.chrom,mean(testing.mean))
-  sd.chrom<-c(sd.chrom,sd(testing.mean))
+  mean.chrom<-c(mean.chrom,reduce)
+  sd.chrom<-c(sd.chrom,sd.c[rm])
 }
-chromGlobalMethyl<-data.frame(chrom.label = chrom.label, mean.chrom = mean.chrom, sd.chrom = sd.chrom)
+chromGlobalMethyl<-data.frame(chrom = chrom,chrom.loc = chrom.loc, mean.chrom = mean.chrom, sd.chrom = sd.chrom)
+length(chrom)
+hist(mean.chrom)
+plot(density(mean.chrom~chrom.loc))
+head(chromGlobalMethyl)
 ### mean methylation is remarkable consistent in both mean and sd between all chromosomes
 #EX
 # chrom.label mean.chrom  sd.chrom
@@ -245,12 +291,6 @@ chromGlobalMethyl<-data.frame(chrom.label = chrom.label, mean.chrom = mean.chrom
 #### Taking single chrom1 data and inputting into EWAS_Generator Sim ####
 
 source(file = "ewas_generator.R")
-
-dim(tot.count)
-dim(m.count)
-dim(p.variable)
-dim(relate.mat)
-dim(cov.mat)
 
 p.value<-1000
 K.value<-7
