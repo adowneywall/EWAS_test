@@ -5,6 +5,38 @@ library(cate)
 library(lfmm)
 library(Rarity)
 
+### READING in all chr files into single matrix w/ col for chr name
+baboon.file.names<-list.files(path = "DATA/Empirical_Data/baboon_example/BSSeq_Baboon/",pattern = "counts*")
+chrom<-NULL
+chrom.loc<-NULL
+b.agg<-NULL
+b.labs<-NULL
+for (i in 1:20){
+  tot.count<-read.table(paste("DATA/Empirical_Data/baboon_example/BSSeq_Baboon/",baboon.file.names[i],sep = ""),header = T,row.names = 1)
+  m.count<-read.table(paste("DATA/Empirical_Data/baboon_example/BSSeq_Baboon/",baboon.file.names[(20+i)],sep = ""),header=T,row.names = 1)
+  beta<-m.count/tot.count
+  beta.mat<-as.matrix(beta)
+  
+  chrom<-sapply(row.names(beta.mat),function(x)strsplit(x,"_")[[1]][1])
+  chrom.loc<-sapply(row.names(beta.mat),function(x)as.numeric(strsplit(x,"_")[[1]][2]))
+  beta.l<-cbind(chrom,chrom.loc)
+  if(i == 1){
+    b.agg <- beta.mat
+    b.labs<- beta.l
+  } 
+  else{
+    b.agg<-rbind(b.agg,beta.mat)
+    b.labs<-rbind(b.labs,beta.l)
+  }
+print(i)
+}
+baboonfull<-data.frame(b.labs,b.agg)
+output_baboon<-prune_data(baboonfull,metadata=T,metaCols=c(1:2),bmeanL = .1,bmeanU = .9,NAr = 0)
+
+
+
+
+#### FOR examining single chromosome
 tot.count<-read.table("DATA/Empirical_Data/baboon_example/BSSeq_Baboon/counts_chr1_n50.txt",header = T,row.names = 1)
 m.count<-read.table("DATA/Empirical_Data/baboon_example/BSSeq_Baboon/mcounts_chr1_n50.txt",header=T,row.names = 1)
 p.variable<-read.table("DATA/Empirical_Data/baboon_example/BSSeq_Baboon/predictor_n50.txt")
