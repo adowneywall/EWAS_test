@@ -4,6 +4,7 @@
 
 ##### Parameter Description ####
 library(dplyr)
+library(MASS)
 #n	number of individuals
 #p	number of response variables.
 #K	number of latent factors.
@@ -28,6 +29,7 @@ ewas_generator <- function (n, # sample#
                             mean.B = 5.0, # mean effect size
                             sd.U = 1.0, # standard deviation for factors
                             sd.V = 1.0, # sd.V standard deviations for loadings
+                            nb.t = NULL,
                             setSeed=NULL) 
 {
   set.seed(setSeed) # this is to set permanent seed
@@ -50,26 +52,66 @@ ewas_generator <- function (n, # sample#
   U <- UX[, 1:K, drop = FALSE]
   X <- UX[, K + 1, drop = FALSE]
   V <- MASS::mvrnorm(p, mu = rep(0, K), Sigma = sd.V^2 * diag(K))
-  B <- matrix(0, p, 1)
-  B[outlier, 1] <- rnorm(outlier.nb, mean.B, sd.B)
   
+  # Actual effect of variable of interest
+  B <- matrix(0, p, 1) # variable will have zero effect on most loci
+  B[outlier, 1] <- rnorm(outlier.nb, mean.B, sd.B) # some small proportion do have an effect (magnitude of effect controlled by user)
+  
+  # Random effects 
   Epsilon = MASS::mvrnorm(n, mu = rep(0, p), Sigma = sigma^2 * diag(p))
+  
+  # Adding fixed factors (X *%* t(B)), 
+  # latent factors (U *%* t(V)), 
+  # and random effects (Epsilon) to determine DNA methylation (Y)
+  
   o.order<-c(1:p)
-  Z = U %*% t(V) + X %*% t(B) + Epsilon
-  rZ<-rev(order(abs(rowMeans(t(Z)))))
+  Z = U %*% t(V) + X %*% t(B) + Epsilon #add together all matrices of variation
+  
+  rZ<-rev(order(abs(rowMeans(t(Z))))) # order rows of matrix by level of variation
   o.order<-o.order[rZ]
   Z.ord<-t(t(Z)[rZ,])
+  # measure of methylation mean (generally pulled from a distribution of true means (or medians) from 
+  # a real data set.)
   M = matrix(rep(qnorm(freq),n) , nrow = n, byrow = T)
   rM<-order((abs(rowMeans(t(M)-0.5))))
   M.ord<-(t(t(M)[rM,]))
+  
+  # Both mean values and variation have been order to assign the most variation to SMPs with mean values closer
+  # to 0.5. This follows the behavior seen in most empirical datasets.
+  
   Y.raw = M.ord + Z.ord
   Y.raw = Y.raw[,order(o.order)]
   Y.logit = exp(Y.raw)/(1+exp(Y.raw)) 
   Y = pnorm(Y.raw)
+  
+  # Generated a matrix of same dimension as Y (beta vals), but with 'read counts' simulating the number of reads for 
+  # each locus for each individual. Standardized to minimum 10 reads using negative binomial distributions from empirical data
+  if(!is.null(nb.t)){
+    t.r<-matrix(nrow = nrow(Y),ncol = ncol(Y))
+    for(i in 1:length(s)){
+      s<-sample(1:nrow(nb.t),size = 1)
+      temp.r<-rnbinom(nrow(Y),size=nb.t[s,1],mu=nb.t[s,2])
+      while(length((temp.r[temp.r >= 10])) < 5){
+        s<-sample(1:nrow(nb.t),size = 1)
+        temp.r<-rnbinom(nrow(Y),size=nb.t[s,1],mu=nb.t[s,2])
+      }
+      t.r[,i] <-sample(temp.r[which(temp.r >= 10)],nrow(Y),replace=T)
+    }
+    m.rY<-apply((t.r*Y),c(1,2),function(x){as.integer(x)})
+    m.rYlog<-apply((t.r*Y),c(1,2),function(x){as.integer(x)})
+  }else{
+    t.r<-NULL
+    m.rY<-NULL
+    m.rYlog<-NULL
+  }
+  
   #Y.collapse = apply(Y,2,function(x){collapse(x)}) # outdated 
   return(list(Y = Y, #beta values
               Y.raw = Y.raw, # beta-values before pnorm adjustment
               Y.logit = Y.logit,
+              t.reads=t.r,
+              m.log.reads=m.rY,
+              m.pnorm.reads=m.rYlog,
               #Y.collapse = Y.collapse, # beta-values collapsed into a 0-0.5 or 1-0.5 range
               freq = freq, # Vector of the selected beta-value means
               Epsilon=Epsilon, 
@@ -209,6 +251,7 @@ multi.sim.gen<-function(n,
                         sd.Usd = 0.3, # sd of sd 
                         sd.V = 1.0, # sd.V standard deviations for loadings
                         runs = 1, # number of times each sim
+                        nb.t = NULL, # size and mu estimates for simulating read counts for beta values
                         setSeed=NULL,
                         rep = 1,
                         dir.name = "DATA/EWAS_Sims/",
@@ -259,11 +302,15 @@ multi.sim.gen<-function(n,
                                     sd.B = s.sub$sd.b[i],
                                     mean.B = s.sub$mean.B[i],
                                     sd.U = ifelse(is.null(sd.U),rnorm(2,mean=0.4,sd=0.3),sd.U),
-                                    sd.V = s.sub$sd.V[i])
+                                    sd.V = s.sub$sd.V[i],
+                                    nb.t = nb.t)
       rep.fold<-paste(new.folder.name,"/Rep",s.sub$Rep[i],sep="")
       dir.create(rep.fold)
       write.csv(x=temp.scenario$Y,
                 file = paste(rep.fold,"/Y_",s.sub$n[i],"_",s.sub$p[i],"_",s.sub$prop.variance[i],"_",s.sub$mean.B[i],".csv",sep=""),
+                row.names = F)
+      write.csv(x=temp.scenario$Y.logit,
+                file = paste(rep.fold,"/Ylogit_",s.sub$n[i],"_",s.sub$p[i],"_",s.sub$prop.variance[i],"_",s.sub$mean.B[i],".csv",sep=""),
                 row.names = F)
       write.csv(x=temp.scenario$X,
                 file = paste(rep.fold,"/X_",s.sub$n[i],"_",s.sub$p[i],"_",s.sub$prop.variance[i],"_",s.sub$mean.B[i],".csv",sep=""),
@@ -281,6 +328,11 @@ multi.sim.gen<-function(n,
       write.csv(x=temp.scenario$covar.mat,file = paste(rep.fold,"/covar_",s.sub$n[i],"_",s.sub$p[i],"_",s.sub$prop.variance[i],"_",s.sub$mean.B[i],".csv",sep=""))
       write.csv(x=temp.scenario$causal, file = paste(rep.fold,"/causalLoci_",s.sub$n[i],"_",s.sub$p[i],"_",s.sub$prop.variance[i],"_",s.sub$mean.B[i],".csv",sep=""))
       write.csv(x=temp.scenario$freq, file = paste(rep.fold,"/simMeans_",s.sub$n[i],"_",s.sub$p[i],"_",s.sub$prop.variance[i],"_",s.sub$mean.B[i],".csv",sep=""))
+      if(!is.null(nb.t)){
+        write.csv(x=temp.scenario$t.reads,file = paste(rep.fold,"/tReads_",s.sub$n[i],"_",s.sub$p[i],"_",s.sub$prop.variance[i],"_",s.sub$mean.B[i],".csv",sep=""))
+        write.csv(x=temp.scenario$m.reads,file = paste(rep.fold,"/mReads_",s.sub$n[i],"_",s.sub$p[i],"_",s.sub$prop.variance[i],"_",s.sub$mean.B[i],".csv",sep=""))
+      }
+      
       print(paste("....Rep ",j," of ",rep,sep=""))
     }
     print(paste("Simulation run in process... approximately ", round((i*rep)/nrow(scenarios)*100,digits=1)," % complete...",sep="")) 

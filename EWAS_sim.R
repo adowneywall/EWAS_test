@@ -20,6 +20,8 @@ q.chh<-readRDS("DATA/Empirical_Data/quercus_example/chh_pruned.RData")
 q.chg<-readRDS("DATA/Empirical_Data/quercus_example/chg_pruned.RData")
 b.cpg <- readRDS("DATA/Empirical_Data/baboon_example/baboon_prune.RData")
 
+nb.baboon<-readRDS("DATA/Empirical_Data/baboon_example/negBinomFitParam.Rdata")
+
 q.cpg.means<-data.frame(x="Q-CpG",y=q.cpg$means)
 q.chh.means<-data.frame(x="Q-CHH",y=q.chh$means)
 q.chg.means<-data.frame(x="Q-CHG",y=q.chg$means)
@@ -118,20 +120,39 @@ ggplot(sub.lfmm,aes(x=as.factor(prop.variance),y=as.numeric(power_fdr))) + geom_
 mean(t1$full.df$K.bcv)
 mean(t1$full.df$K.be)
 
-
-P<-1000
-N<-500
-log.test<-ewas_generator(n = N,p = P,K = 5,freq = sample(q.cpg.means$y,size = P,replace=T),
+### Examining performance of logit-transformed beta-values.
+P<-2000
+N<-50
+log.test<-ewas_generator(n = N,p = P,K = 1,freq = sample(q.cpg.means$y,size = P,replace=T),
                          prop.causal = 0.025,prop.variance = 0.5,
-                         sd.U = .2,sd.V = .5,sd.B = .2,mean.B = 2,sigma = .2/5 
-                        )
-hist(log.test$Y[,10])
-hist(log.test$Y.logit[,15])
+                         sd.U = 1,sd.V = 1,sd.B = .5,mean.B = 2,sigma = .2)
+hist(log.test$Y[,30],xlim=c(0,1))
+hist(log.test$Y.logit[,30],xlim=c(0,1))
 
-dim(q.cpg$B[,10])
-bb<-as.matrix(q.cpg$B)
-dim(bb)
-hist(bb[2000,])
-I<-6000
-hist(log(bb[I,]/(1-bb[I,])))
+source("EWAS_generator.R")
+log.test<-ewas_generator(n = N,p = P,K = 1,freq = sample(q.cpg.means$y,size = P,replace=T),
+                         prop.causal = 0.025,prop.variance = 0.5,
+                         sd.U = 1,sd.V = 1,sd.B = .5,mean.B = 2,sigma = .2,
+                         nb.t = nb.baboon)
+
+
+multi.sim.gen(n=c(250),
+              p=c(2000),
+              K=c(1),
+              freq=freq.multi,
+              prop.variance = 0.5, #seq(from=0.1,to=0.9,by=.1),
+              sigma=0.1,
+              mean.B = c(1), 
+              sd.U=b.pca.sd,
+              sd.Um=0.2,
+              sd.Usd=0.2,
+              rep=2, 
+              nb.t = nb.baboon,
+              dir.name = "DATA/EWAS_Sims/", 
+              sim.folder = "baboon_READTest")
+
+
+q.cpg.raw<-readRDS("DATA/Empirical_Data/quercus_example/cpg_raw.RData")
+baboon.raw<-readRDS("DATA/Empirical_Data/baboon_example/baboon_raw.RData")
+nb.baboon<-readRDS("DATA/Empirical_Data/baboon_example/negBinomFitParam.Rdata")
 
