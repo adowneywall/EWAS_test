@@ -305,7 +305,7 @@ simMeta<-function(x){
   sim=paste(strsplit(x,split = "/")[[1]][len],"/",sep="")
   return(
     list(
-      param=read.csv(paste(x,"SimulationParameterList.csv",sep="")),
+      param=read.csv(paste("~/Desktop/EWAS_test/DATA/EWAS_Sims/",x,"SimulationParameterList.csv",sep="")),
       sim=sim
     )
   )
@@ -333,16 +333,16 @@ simRead <- function(SimRun,sim,reps){
   Y.list<-list()
   causalLoci.list<-list()
   covar.list<-list()
-  
+  #setwd("~/Desktop/EWAS_test")
     for(i in 1:reps){
       local.folder<-paste("DATA/EWAS_Sims/",SimRun,"Sim",sim$Sim,"/Rep",i,sep="")
-      U.list[[i]]<-as.matrix(read.csv(Sys.glob(paste(local.folder,"/U*.csv",sep=""))))
+      #U.list[[i]]<-as.matrix(read.csv(Sys.glob(paste(local.folder,"/U*.csv",sep=""))))
       #read.csv(Sys.glob(paste("DATA/EWAS_Sims/Sim_TestRun_2018-04-04/Sim1/Rep1","/U*.csv",sep="")))
       U.list[[i]]<-as.matrix(read.csv(Sys.glob(paste(local.folder,"/U*.csv",sep=""))))
       B.list[[i]]<-as.matrix(read.csv(Sys.glob(paste(local.folder,"/B*.csv",sep=""))))
       V.list[[i]]<-as.matrix(read.csv(Sys.glob(paste(local.folder,"/V*.csv",sep=""))))
       X.list[[i]]<-read.csv(Sys.glob(paste(local.folder,"/X*.csv",sep="")))
-      Y.list[[i]]<-as.matrix(read.csv(Sys.glob(paste(local.folder,"/Y*.csv",sep=""))))
+      Y.list[[i]]<-as.matrix(read.csv(Sys.glob(paste(local.folder,"/Y_*.csv",sep=""))))
       causalLoci.list[[i]]<-read.csv(Sys.glob(paste(local.folder,"/causalLoci*.csv",sep="")))$x
       covar.list[[i]]<-as.matrix(read.csv(Sys.glob(paste(local.folder,"/covar*.csv",sep=""))))
       #B.list[[i]]<-as.matrix(data.table::fread(Sys.glob(paste(local.folder,"/B*.csv",sep="")),drop = T))
@@ -367,7 +367,7 @@ binomal.glm.test <- function(data.y,data.x,lf){
   for (k in 1:ncol(data.y)){
     mod.glm <- glm(data.y[,k] ~ ., 
                    data = data.frame(data.x,lf),
-                   binomial(link = "probit"))
+                   binomial(link = "logit"))
     p[k] <- summary(mod.glm)$coeff[2,4]
     z[k] <- summary(mod.glm)$coeff[2,3] 
   }
@@ -377,15 +377,14 @@ binomal.glm.test <- function(data.y,data.x,lf){
 }
 
 simTestStore<-function(simTest,name=NULL,dir=NULL,verbose=T){
-  index<-simTest$full.df %>% select(Sim,rep,method)
-  sim.folder.out<-paste(dir,"Outputs/",sep="")
+  index<-simTest$full.df %>% select_("Sim","rep","method")
+  sim.folder.out<-paste(dir,"Output/",sep="")
   sim.folder.loc<-paste(sim.folder.out,name,"/",sep="")
   dir.create(sim.folder.loc)
   methods<-length(unique(index$method))
   sims<-length(unique(index$Sim))
   reps<-length(unique(index$rep))
   write.csv(x=simTest$full.df,file = paste(sim.folder.loc,"SimTestList",".csv",sep=""))
-  
   for(i in 2:methods){ # output from single method
     for(j in 1:sims){ # loop through sim
       for(l in 1:reps){ # loop through replicates
