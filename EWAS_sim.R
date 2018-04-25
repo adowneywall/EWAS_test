@@ -142,21 +142,51 @@ dim(mc)
 p=2000
 i=1
 m=max(tc[,i])
-pval<-NULL
-zscore<-NULL
+pvalB1<-NULL
+zscoreB1<-NULL
+pvalB2<-NULL
+zscoreB2<-NULL
+pvalE1<-NULL
+zscoreE1<-NULL
+pvalE2<-NULL
+zscoreE2<-NULL
+
 for(i in 1:p){
   xFull<- cbind.data.frame(y=mc[,i],n=tc[,i],x=x$V1,lf)
   R <- cbind.data.frame(y=mc[,i],n=tc[,i],u=lf)
-  bEst<-betabin(cbind(y,n-y)~x,~1,link = "logit",data=xFull)
-  bEst<-betabin(cbind(R$y,R$n-R$y)~x + V1 + V2 + V3,~1,link = "logit",data=df)
-  bEst2<-BBmm(fixed.formula = y~x+V1,~rep(1,length(y)),m=n,data=xFull)
-  glmE<-glm(cbind(y,n-y)~x,binomial(link="logit"))
-  zscore[i]<-bEst@fixed.param[2]/sqrt(bEst@varparam[2,2])
-  pval[i]<-2 * (1 - pnorm(abs(zscore)))
-  #bNULL<-betabin(cbind(y,n-y)~1,~1,link = "logit",data=df)
-  #an<-anova(bNULL,bEst)
-  #pval[i]<-an@anova.table[2,11]
-}
+  bEst1<-betabin(cbind(y,n-y)~x,~1,link = "logit",data=xFull)
+  bEst2<-betabin(cbind(R$y,R$n-R$y)~x + V1 + V2 + V3,~1,link = "logit",data=xFull)
+  #bEst2<-BBmm(fixed.formula = y~x+V1,~rep(1,length(y)),m=n,data=xFull)
+  glmE1<-glm(cbind(y,n-y)~x,binomial(link="logit"),data = xFull)
+  glmE2<-glm(cbind(y,n-y)~x + V1 + V2 + V3,binomial(link="logit"),data = xFull)
+  
+  zscoreB1[i]<-bEst1@fixed.param[2]/sqrt(bEst1@varparam[2,2])
+  pvalB1[i]<-2 * (1 - pnorm(abs(zscoreB1)))
+  
+  zscoreB2[i]<-bEst2@fixed.param[2]/sqrt(bEst2@varparam[2,2])
+  pvalB2[i]<-2 * (1 - pnorm(abs(zscoreB2)))
+  
+  zscoreE1[i]<-summary(glmE1)$coeff[2,3] 
+  pvalE1[i]<-summary(glmE1)$coeff[2,4] 
+  
+  zscoreE2[i]<-summary(glmE2)$coeff[2,3] 
+  pvalE2[i]<-summary(glmE2)$coeff[2,4] 
+  print(i)
+  }
+
+B1FDR<-fdrtool(zscoreB1)
+B2FDR<-fdrtool(zscoreB2)
+E1FDR<-fdrtool(zscoreE1)
+E2FDR<-fdrtool(zscoreE2)
+CL.new<-CL[CL<1454]
+
+temp<-B1FDR
+length(temp$qval)
+plot(-log(temp$qval)~c(1:1454))
+points(x=CL.new,y=-log(temp$qval)[CL.new],col="red",pch=16)
+points(x=c(1:1454)[temp$lfdr<0.05],y=-log(temp$qval)[temp$lfdr<0.05],col="blue",pty=5,pch=25)
+hist(temp$lfdr)
+
 pvals<-cbind.data.frame(loci=1:p,pval)
 hist(-log(pvals$pval))
 plot(-log(pvals$pval)~pvals$loci)
@@ -165,7 +195,8 @@ points(y=-log(pvals$pval[CL]),x=CL,
 
 
 
-??BBmm()
+
+?BBmm()
 # Defining the parameters
 k <- 100
 m <- 10
