@@ -8,6 +8,8 @@ library(dSVA)
 library(sva)
 library(fdrtool)
 library(RefFreeEWAS)
+library(aod)
+library(HRQoL)
 
 source("EWAS_generator.R")
 source("EWAS_methodTest.R")
@@ -33,7 +35,6 @@ ggplot(species.means,aes(x=x,y=y)) + geom_violin() + labs(y="Mean B-values",x=""
   theme_bw()
 
 #### Single simulation Tests ####
-
 ## Simulation Arguments
 N.NUM = 50 # number of individuals
 P.NUM = 2000 # number of loci
@@ -65,28 +66,28 @@ for(i in N:M){
 }
 
 ### Multi simulation Tests ####
-freq.multi<-q.cpg$means
+freq.multi<-b.cpg$means
 
 ## getting real variance to parameterize pcs
 #baboon data
-b.pca<-prcomp(q.cpg$B)
+b.pca<-prcomp(b.cpg$B)
 screeplot(b.pca) # really only one pc here
-b.pca.sd<-b.pca$sdev[1] # possible include more if you want to include more pcs in sims
+b.pca.sd<-b.pca$sdev[1:10] # possible include more if you want to include more pcs in sims
 
-multi.sim.gen(n=c(50,250,500),
+multi.sim.gen(n=c(50,250),
               p=c(2000),
               K=c(1,3),
               freq=freq.multi,
               prop.variance = seq(from=0.1,to=0.9,by=.1),
               sigma=0.2,
-              mean.B = c(1,2,5), 
+              mean.B = c(1,3), 
               sd.U=b.pca.sd,
               sd.Um=1,
-              sd.Usd=0.2,
+              sd.Usd=0.1,
               rep=20,
-              nb.t = NULL,
+              nb.t = nb.baboon,
               dir.name = "DATA/EWAS_Sims/", 
-              sim.folder = "quercus_Final")
+              sim.folder = "baboon.final2")
 
 ## Examining the performance of difference methods on simulated baboon data
 sim.folder<-"quercus_Final_2018-04-19/"
@@ -106,7 +107,93 @@ baboon.Final01<-simTest(sMeta$sim,simRange,sMeta$param,K.est = T,
 #saveRDS(baboon.Final01,"DATA/EWAS_Sims/quercus_Final_2018-04-19/Output/FinalSimMethod.Rdata")
 ## currently K.est needs to = T, otherwise script won't run
 
-#### Short work up of quercus example
+
+
+#### Testing alternative regression methods ####
+### Baboon Sample rerun with count data
+# sim.folder<-"baboon.final2_2018-04-24/"
+# 
+# sMeta<-simMeta(sim.folder) # enter the name of folder w/ directory, returns parameters list [param] and sim folder name
+# 
+# # Options for selecting a subset of your simulation list for testing
+# sub.list<-sMeta$param[1,] #subset(sMeta$param,sMeta$param$n >= 100 & sMeta$param$p >= 2000)
+# 
+# #simRange<-seq(from=1,to=max(sim.list$X))
+# simRange<- sub.list$Sim
+# sim<-sMeta$param[50,]
+# reps=20
+# sim.data<-NULL
+# sim.data<-simRead(sim.folder,sim,reps)
+# saveRDS(sim.data,"DATA/EWAS_Sims/baboonfinal2_Sim1Rep20.Rdata")
+
+
+sim.data <- readRDS("DATA/EWAS_Sims/baboonfinal2_Sim1Rep20.Rdata")
+bestim<-sim.data$mcount.list[[1]]/sim.data$tcount.list[[1]]
+plot(sim.data$Y.list[[1]][,60]~bestim[,60])
+summary(lm(sim.data$Y.list[[1]][,60]~bestim[,60]))
+
+CL<-sim.data$CL.list[[1]]
+mc<-sim.data$mcount.list[[1]]
+tc<-sim.data$tcount.list[[1]]
+x<-sim.data$X.list[[1]]
+y<-sim.data$Y.list[[1]]
+lf<-sim.data$U.list[[1]]
+dim(mc)
+p=2000
+i=1
+m=max(tc[,i])
+pval<-NULL
+zscore<-NULL
+for(i in 1:p){
+  xFull<- cbind.data.frame(y=mc[,i],n=tc[,i],x=x$V1,lf)
+  R <- cbind.data.frame(y=mc[,i],n=tc[,i],u=lf)
+  bEst<-betabin(cbind(y,n-y)~x,~1,link = "logit",data=xFull)
+  bEst<-betabin(cbind(R$y,R$n-R$y)~x + V1 + V2 + V3,~1,link = "logit",data=df)
+  bEst2<-BBmm(fixed.formula = y~x+V1,~rep(1,length(y)),m=n,data=xFull)
+  glmE<-glm(cbind(y,n-y)~x,binomial(link="logit"))
+  zscore[i]<-bEst@fixed.param[2]/sqrt(bEst@varparam[2,2])
+  pval[i]<-2 * (1 - pnorm(abs(zscore)))
+  #bNULL<-betabin(cbind(y,n-y)~1,~1,link = "logit",data=df)
+  #an<-anova(bNULL,bEst)
+  #pval[i]<-an@anova.table[2,11]
+}
+pvals<-cbind.data.frame(loci=1:p,pval)
+hist(-log(pvals$pval))
+plot(-log(pvals$pval)~pvals$loci)
+points(y=-log(pvals$pval[CL]),x=CL,
+      col="red",pch=16)
+
+
+
+??BBmm()
+# Defining the parameters
+k <- 100
+m <- 10
+phi <- 0.5
+beta <- c(1.5,-1.1)
+sigma <- 0.5
+
+# Simulating the covariate and random effects
+x <- runif(k,0,10)
+X <- model.matrix(~x)
+z <- as.factor(rBI(k,4,0.5,2))
+Z <- model.matrix(~z-1)
+u <- rnorm(5,0,sigma)
+
+
+# The linear predictor and simulated response variable
+eta <- beta[1]+beta[2]*x+crossprod(t(Z),u)
+p <- 1/(1+exp(-eta))
+y <- rBB(k,m,p,phi)
+dat <- data.frame(cbind(y,x,z))
+dat$z <- as.factor(dat$z)
+
+# Apply the model
+model <- BBmm(fixed.formula = y~x,random.formula = ~z,m=c(y+m),data=dat)
+model
+
+
+#### Short work up of quercus example ####
 #Sim info:
 # n=c(50,250,500),
 # p=c(2000),
@@ -218,7 +305,7 @@ saveRDS(object = hitRankDFfix,file = "DATA/EWAS_Sims/quercus_Final_2018-04-19/Ou
 hitRankDFfix<-readRDS("DATA/EWAS_Sims/quercus_Final_2018-04-19/Output/hitRankOutput.Rdata")
 hitRankSum <- hitRankDFfix %>% group_by(method,sim,hr) %>%
   summarise(mean.q=mean(q),mean.tr=mean(tr),sd.tr=sd(tr))
-
+library(ggplot2)
 singleSim<-subset(ss,ss$method == "lfmm" & ss$rep == 1)
 singleSim<-singleSim[,c(1,2,4,7,10)]
 names(singleSim)<-c("sim",names(singleSim)[2:5])
@@ -239,7 +326,7 @@ ggplot(hitRanksingleEffectSize,aes(x=hr,y=mean.tr,interaction(as.factor(n),as.fa
   theme_bw() + labs(x = "Hit Rank",y = "Mean Causal Hits (30 simulations)")
 
 
-#### Short work up for Baboon based data work up
+#### Short work up for Baboon based data work up ####
 # Based on simulations 
 # with variable:
 # n = 50,100,250,500
@@ -250,7 +337,8 @@ ggplot(hitRanksingleEffectSize,aes(x=hr,y=mean.tr,interaction(as.factor(n),as.fa
 # sd.U=b.pca.sd,
 # sd.Um=1,
 # sd.Usd=0.2,
-# sim data has 100, I only ran the test on 20
+# sim data has 200reps (since deleted), I only ran the test on 20 (10 left)
+# only 72 sims
 working.df<-readRDS("DATA/EWAS_Sims/baboon_Final_2018-04-16/Output/Final01.Rdata")$full.df
 
 ss<-working.df
@@ -380,7 +468,7 @@ ggsave(filename = "DATA/EWAS_Sims/baboon_Final_2018-04-16/Output/HitPlotCateSum.
 wmean(ss$K.bcv,na.rm=T)
 mean(ss$K.leek)
 
-### Examining performance of logit-transformed beta-values.
+### Examining performance of logit-transformed beta-values. ####
 P<-2000
 N<-50
 log.test<-ewas_generator(n = N,p = P,K = 1,freq = sample(q.cpg.means$y,size = P,replace=T),

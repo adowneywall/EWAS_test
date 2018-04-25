@@ -29,7 +29,9 @@ ewas_generator <- function (n, # sample#
                             mean.B = 5.0, # mean effect size
                             sd.U = 1.0, # standard deviation for factors
                             sd.V = 1.0, # sd.V standard deviations for loadings
-                            nb.t = NULL,
+                            nb.t = NULL, # estimated negative binomial parameters for total read count
+                            MinRD = 10, # minimum number of reads in sim
+                            MaxRD = 100, 
                             setSeed=NULL) 
 {
   set.seed(setSeed) # this is to set permanent seed
@@ -85,33 +87,34 @@ ewas_generator <- function (n, # sample#
   Y = pnorm(Y.raw)
   
   # Generated a matrix of same dimension as Y (beta vals), but with 'read counts' simulating the number of reads for 
-  # each locus for each individual. Standardized to minimum 10 reads using negative binomial distributions from empirical data
-  if(!is.null(nb.t)){
+  # each locus for each individual. Standardized to minimum 10 reads using negative binomial distributions from empirical data  if(!is.null(nb.t)){
+  if(!is.null(nb.t)){ 
     t.r<-matrix(nrow = nrow(Y),ncol = ncol(Y))
-    for(i in 1:length(s)){
+    m.r<-matrix(nrow = nrow(Y),ncol = ncol(Y))
+    s<-NULL
+    for(i in 1:p){
       s<-sample(1:nrow(nb.t),size = 1)
-      temp.r<-rnbinom(nrow(Y),size=nb.t[s,1],mu=nb.t[s,2])
-      while(length((temp.r[temp.r >= 10])) < 5){
-        s<-sample(1:nrow(nb.t),size = 1)
-        temp.r<-rnbinom(nrow(Y),size=nb.t[s,1],mu=nb.t[s,2])
+      temp.r<-rnbinom(nrow(Y)*10,size=nb.t[s,1],mu=nb.t[s,2])
+      while(length((temp.r[temp.r >= MinRD & temp.r <= MaxRD])) < 20){
+         s<-sample(1:nrow(nb.t),size = 1)
+         temp.r<-rnbinom(nrow(Y),size=nb.t[s,1],mu=nb.t[s,2])
       }
-      t.r[,i] <-sample(temp.r[which(temp.r >= 10)],nrow(Y),replace=T)
+      t.r[,i] <-sample(temp.r[which(temp.r >= MinRD & temp.r <=MaxRD)],nrow(Y),replace=T)
+      m.r[,i] <-round(Y[,i]*t.r[,i])
     }
-    m.rY<-apply((t.r*Y),c(1,2),function(x){as.integer(x)})
-    m.rYlog<-apply((t.r*Y),c(1,2),function(x){as.integer(x)})
+    #m.rY<-apply((t.r*Y),c(1,2),function(x){as.integer(x)})
+    #m.rYlog<-apply((t.r*Y),c(1,2),function(x){as.integer(x)})
   }else{
     t.r<-NULL
-    m.rY<-NULL
-    m.rYlog<-NULL
+    m.r<-NULL
+    #m.rYlog<-NULL
   }
-  
   #Y.collapse = apply(Y,2,function(x){collapse(x)}) # outdated 
   return(list(Y = Y, #beta values
               Y.raw = Y.raw, # beta-values before pnorm adjustment
               Y.logit = Y.logit,
               t.reads=t.r,
-              m.log.reads=m.rY,
-              m.pnorm.reads=m.rYlog,
+              m.reads=m.r,
               #Y.collapse = Y.collapse, # beta-values collapsed into a 0-0.5 or 1-0.5 range
               freq = freq, # Vector of the selected beta-value means
               Epsilon=Epsilon, 
@@ -301,7 +304,7 @@ multi.sim.gen<-function(n,
                                     sigma = s.sub$sigma[i],
                                     sd.B = s.sub$sd.b[i],
                                     mean.B = s.sub$mean.B[i],
-                                    sd.U = ifelse(is.null(sd.U),rnorm(2,mean=0.4,sd=0.3),sd.U),
+                                    sd.U = sd.U[1:s.sub$K[i]],#ifelse(is.null(sd.U),rnorm(2,mean=0.4,sd=0.3),sd.U),
                                     sd.V = s.sub$sd.V[i],
                                     nb.t = nb.t)
       rep.fold<-paste(new.folder.name,"/Rep",s.sub$Rep[i],sep="")

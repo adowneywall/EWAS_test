@@ -245,7 +245,7 @@ simTest<- function(SimRun,simRange,simList,K.est = FALSE,
         for (l in 1:ncol(sim.data$Y.list[[k]])){
           mod.glm <- glm(sim.data$Y.list[[k]][,l] ~ ., 
                          data = data.frame(sim.data$X.list[[k]]),
-                         binomial(link = "probit"))
+                         binomial(link = "logit"))
           p[l] <- summary(mod.glm)$coeff[2,4]
           z[l] <- summary(mod.glm)$coeff[2,3] 
         }
@@ -333,11 +333,10 @@ simRead <- function(SimRun,sim,reps){
   Y.list<-list()
   causalLoci.list<-list()
   covar.list<-list()
-  #setwd("~/Desktop/EWAS_test")
+  tcount.list <- list()
+  mcount.list <- list()
     for(i in 1:reps){
       local.folder<-paste("DATA/EWAS_Sims/",SimRun,"Sim",sim$Sim,"/Rep",i,sep="")
-      #U.list[[i]]<-as.matrix(read.csv(Sys.glob(paste(local.folder,"/U*.csv",sep=""))))
-      #read.csv(Sys.glob(paste("DATA/EWAS_Sims/Sim_TestRun_2018-04-04/Sim1/Rep1","/U*.csv",sep="")))
       U.list[[i]]<-as.matrix(read.csv(Sys.glob(paste(local.folder,"/U*.csv",sep=""))))
       B.list[[i]]<-as.matrix(read.csv(Sys.glob(paste(local.folder,"/B*.csv",sep=""))))
       V.list[[i]]<-as.matrix(read.csv(Sys.glob(paste(local.folder,"/V*.csv",sep=""))))
@@ -345,12 +344,8 @@ simRead <- function(SimRun,sim,reps){
       Y.list[[i]]<-as.matrix(read.csv(Sys.glob(paste(local.folder,"/Y_*.csv",sep=""))))
       causalLoci.list[[i]]<-read.csv(Sys.glob(paste(local.folder,"/causalLoci*.csv",sep="")))$x
       covar.list[[i]]<-as.matrix(read.csv(Sys.glob(paste(local.folder,"/covar*.csv",sep=""))))
-      #B.list[[i]]<-as.matrix(data.table::fread(Sys.glob(paste(local.folder,"/B*.csv",sep="")),drop = T))
-      # V.list[[i]]<-as.matrix(data.table::fread(Sys.glob(paste(local.folder,"/V*.csv",sep="")),drop = T))
-      # X.list[[i]]<-data.table::fread(Sys.glob(paste(local.folder,"/X*.csv",sep="")),drop = T)
-      # Y.list[[i]]<-as.matrix(data.table::fread(Sys.glob(paste(local.folder,"/Y*.csv",sep="")),drop = T))
-      # causalLoci.list[[i]]<-data.table::fread(Sys.glob(paste(local.folder,"/causalLoci*.csv",sep="")),drop = T)$x
-      # covar.list[[i]]<-as.matrix(data.table::fread(Sys.glob(paste(local.folder,"/covar*.csv",sep="")),drop = T))
+      tcount.list[[i]]<-as.matrix(read.csv(Sys.glob(paste(local.folder,"/tRead*.csv",sep=""))))[,-1]
+      mcount.list[[i]]<-as.matrix(read.csv(Sys.glob(paste(local.folder,"/mRead*.csv",sep=""))))[,-1]
     }
     return(list(U.list=U.list,
                 B.list=B.list,
@@ -358,7 +353,9 @@ simRead <- function(SimRun,sim,reps){
                 X.list=X.list,
                 Y.list=Y.list,
                 CL.list=causalLoci.list,
-                CV.list=covar.list))
+                CV.list=covar.list,
+                tcount.list=tcount.list,
+                mcount.list=mcount.list))
 }
 
 binomal.glm.test <- function(data.y,data.x,lf){
