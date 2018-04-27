@@ -4,6 +4,7 @@
 source("EWAS_generator.R")
 source("EWAS_methodTest.R")
 library(lfmm)
+library(missMDA)
 library(fdrtool)
 library(ggplot2)
 ### Reading in process empirical data ####
@@ -16,10 +17,11 @@ q.pred<-readRDS("DATA/Empirical_Data/quercus_example/predictors.RData")
 
 ## Baboon
 b.cpg <- readRDS("DATA/Empirical_Data/baboon_example/baboon_prune.RData")
+b.cpg.raw <- readRDS("DATA/Empirical_Data/baboon_example/baboon_raw.RData")
 b.X<-read.table(file ="DATA/Empirical_Data/baboon_example/BSSeq_Baboon/predictor_n50.txt")
 b.kin<-read.table(file="DATA/Empirical_Data/baboon_example/BSSeq_Baboon/relatedness_n50.txt")
 
-## Multi Species Plot ####
+# Multi Species Plot ####
 q.cpg.means<-data.frame(x="Q-CpG",y=q.cpg$means)
 q.chh.means<-data.frame(x="Q-CHH",y=q.chh$means)
 q.chg.means<-data.frame(x="Q-CHG",y=q.chg$means)
@@ -28,7 +30,7 @@ species.means<-rbind(q.cpg.means,q.chh.means,q.chg.means,baboon)
 ggplot(species.means,aes(x=x,y=y)) + geom_violin() + labs(y="Mean B-values",x="") +
   theme_bw()
 
-### Perform PCA on different datasets (quercus and baboon so far) ####
+# Perform PCA on different datasets (quercus and baboon so far) ####
 
 ## With pruned data
 q.cpg.pca<-prcomp(q.cpg$B)
@@ -57,7 +59,60 @@ head(q.cpg.raw) # holes prevent pca
 ### All data sets appear to only have one pc of major variation
 
 
-### Baboon data with predictor ####
+# Examing structure of variation in empirical dataset + data imputation ####
+b.beta.raw<-b.cpg.raw$betaVal[,-c(1,2)]
+b.mean.raw<-rowMeans(b.beta.raw,na.rm = T)
+b.median.raw<-apply(b.beta.raw, 1, function(x){median(x,na.rm = T)})
+b.sd.raw<-apply(b.beta.raw, 1,function(x){sd(x,na.rm=T)})
+hist(b.mean.raw)
+hist(b.median.raw)
+hist(b.sd.raw)
+
+b.raw.sum<-cbind.data.frame(mean=b.mean.raw,median=b.median.raw,sd=b.sd.raw)
+ggplot(b.raw.sum,aes(x=median,y=sd)) + geom_point()
+
+source("EWAS_generator.R")
+multi.sim.gen(n=c(50),
+              p=c(2000),
+              K=c(1),
+              freq=freq.multi,
+              prop.variance = 0.4,#seq(from=0.1,to=0.9,by=.1),
+              sigma=0.2,
+              mean.B = c(1), 
+              sd.U=b.pca.sd,
+              sd.Um=0.3,
+              sd.Usd=0.1,
+              sd.V=0.2,
+              rep=1,
+              nb.t = nb.baboon,
+              dir.name = "DATA/EWAS_Sims/", 
+              sim.folder = "baboon.test")
+
+## Examining the performance of difference methods on simulated baboon data
+sim.folder<-"baboon.test_2018-04-27/"
+example<-simRead(SimRun = sMeta$sim,sim = sMeta$param,reps = 1)
+example$Y2.list
+lfmm_out<-lfmm::lfmm_ridge(Y = example$Y2.list[[1]],X = example$X.list[[1]],K =1)
+pval<-lfmm_test(Y = example$Y.list[[1]],X = example$X.list[[1]],lfmm = lfmm_out,calibrate = "gif")
+
+pca<-prcomp(example$Y.list[[1]])
+screeplot(pca)
+pval$gif
+hist(pval$pvalue)
+hist(pval$calibrated.pvalue)
+
+sim.Y<-example$Y2.list[[1]]
+sim.Yt<-t(sim.Y)
+b.mean.sim<-rowMeans(sim.Yt,na.rm = T)
+b.median.sim<-apply(sim.Yt,1, function(x){median(x,na.rm = T)})
+b.sd.sim<-apply(sim.Yt,1,function(x){sd(x,na.rm=T)})
+hist(b.mean.sim)
+hist(b.median.sim)
+hist(b.sd.sim,xlim=c(0,1))
+b.sim.sum<-cbind.data.frame(mean=b.mean.sim,median=b.median.sim,sd=b.sd.sim)
+ggplot(b.sim.sum,aes(x=median,y=sd)) + geom_point()
+
+# Baboon data with predictor ####
 b.b<-b.cpg$B # create Y (methylation data)
 b.meta<-b.cpg$metadata
 b.b.X<-as.matrix(b.X) # X
@@ -91,7 +146,7 @@ linear.lfmm$sig <-  "Insiginificant"
 linear.lfmm$sig[lfmm.linear$fdrTool$lfdrl <= 0.05] <-  "Significant"
 ggplot(linear.lfmm,aes(x=c(1:nrow(linear.lfmm)),y=-log10(qval),colour=sig)) + geom_point()
 
-### Quercus data w/ predictor
+# Quercus data w/ predictor ####
 q.cpgM <-q.cpg$B # create Y (methylation data)
 q.meta<-q.cpg$metadata
 b.b.X<-as.matrix(b.X) #
@@ -109,7 +164,7 @@ b.b.X<-as.matrix(b.X) #
 # saveRDS(q.lfmm.list,"DATA/Empirical_Data/quercus_example/lfmm_linear_raw.Rdata")
 
 
-## Figures and Analysis ####
+### Figures and Analysis ####
 q.lfmm.linear<-readRDS("DATA/Empirical_Data/quercus_example/lfmm_linear_raw.Rdata")
 q.lfmm.logit<-readRDS("DATA/Empirical_Data/quercus_example/lfmm_BinomLogit_raw.Rdata")
   

@@ -331,6 +331,7 @@ simRead <- function(SimRun,sim,reps){
   V.list<-list()
   X.list<-list()
   Y.list<-list()
+  Y2.list <- list()
   causalLoci.list<-list()
   covar.list<-list()
   tcount.list <- list()
@@ -342,6 +343,7 @@ simRead <- function(SimRun,sim,reps){
       V.list[[i]]<-as.matrix(read.csv(Sys.glob(paste(local.folder,"/V*.csv",sep=""))))
       X.list[[i]]<-read.csv(Sys.glob(paste(local.folder,"/X*.csv",sep="")))
       Y.list[[i]]<-as.matrix(read.csv(Sys.glob(paste(local.folder,"/Y_*.csv",sep=""))))
+      Y2.list[[i]]<-as.matrix(read.csv(Sys.glob(paste(local.folder,"/Y2_*.csv",sep=""))))
       causalLoci.list[[i]]<-read.csv(Sys.glob(paste(local.folder,"/causalLoci*.csv",sep="")))$x
       covar.list[[i]]<-as.matrix(read.csv(Sys.glob(paste(local.folder,"/covar*.csv",sep=""))))
       tcount.list[[i]]<-as.matrix(read.csv(Sys.glob(paste(local.folder,"/tRead*.csv",sep=""))))[,-1]
@@ -352,6 +354,7 @@ simRead <- function(SimRun,sim,reps){
                 V.list=V.list,
                 X.list=X.list,
                 Y.list=Y.list,
+                Y2.list=Y2.list,
                 CL.list=causalLoci.list,
                 CV.list=covar.list,
                 tcount.list=tcount.list,
@@ -368,6 +371,35 @@ binomal.glm.test <- function(data.y,data.x,lf){
     p[k] <- summary(mod.glm)$coeff[2,4]
     z[k] <- summary(mod.glm)$coeff[2,3] 
   }
+  gif <- median(z^2)/0.456
+  pcal <- pchisq(z^2/gif , df = 1, low = F)
+  return(cbind(p,z,pcal,gif))
+}
+
+binomal.glm.count.test <- function(mc,tc,x,lf=NULL,method=1){
+  p <- NULL
+  z <- NULL
+  
+  if(method=1){
+    for (k in 1:ncol(data.y)){
+      mod.glm <- glm(cbind(mc[,k],tc[,k]-mc[,k])~., 
+                     data = data.frame(x,lf),
+                     binomial(link = "logit"))
+      p[k] <- summary(mod.glm)$coeff[2,4]
+      z[k] <- summary(mod.glm)$coeff[2,3] 
+    }
+  }
+  
+  if(method=2){
+    for (k in 1:ncol(data.y)){
+      mod.glm <- glm(cbind(mc[,k],tc[,k]-mc[,k])~., 
+                     data = data.frame(x,lf),
+                     quasibinomial(link = "logit"))
+      p[k] <- summary(mod.glm)$coeff[2,4]
+      z[k] <- summary(mod.glm)$coeff[2,3] 
+    }
+  }
+  
   gif <- median(z^2)/0.456
   pcal <- pchisq(z^2/gif , df = 1, low = F)
   return(cbind(p,z,pcal,gif))

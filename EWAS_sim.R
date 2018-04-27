@@ -10,6 +10,7 @@ library(fdrtool)
 library(RefFreeEWAS)
 library(aod)
 library(HRQoL)
+library(lfmm)
 
 source("EWAS_generator.R")
 source("EWAS_methodTest.R")
@@ -74,35 +75,47 @@ b.pca<-prcomp(b.cpg$B)
 screeplot(b.pca) # really only one pc here
 b.pca.sd<-b.pca$sdev[1:10] # possible include more if you want to include more pcs in sims
 
-multi.sim.gen(n=c(50,250),
+multi.sim.gen(n=c(50),
               p=c(2000),
-              K=c(1,3),
+              K=c(1),
               freq=freq.multi,
-              prop.variance = seq(from=0.1,to=0.9,by=.1),
+              prop.variance = 0.4,#seq(from=0.1,to=0.9,by=.1),
               sigma=0.2,
-              mean.B = c(1,3), 
+              mean.B = c(1), 
               sd.U=b.pca.sd,
               sd.Um=1,
               sd.Usd=0.1,
-              rep=20,
+              rep=1,
               nb.t = nb.baboon,
               dir.name = "DATA/EWAS_Sims/", 
-              sim.folder = "baboon.final2")
+              sim.folder = "baboon.test")
 
 ## Examining the performance of difference methods on simulated baboon data
-sim.folder<-"quercus_Final_2018-04-19/"
+sim.folder<-"baboon.test_2018-04-27/"
 
 sMeta<-simMeta(sim.folder) # enter the name of folder w/ directory, returns parameters list [param] and sim folder name
 
 # Options for selecting a subset of your simulation list for testing
-sub.list<-sMeta$param[1:108,] #subset(sMeta$param,sMeta$param$n >= 100 & sMeta$param$p >= 2000)
+sub.list<-sMeta$param#[3,] #subset(sMeta$param,sMeta$param$n >= 100 & sMeta$param$p >= 2000)
 
 #simRange<-seq(from=1,to=max(sim.list$X))
 simRange<- sub.list$Sim
 
-baboon.Final01<-simTest(sMeta$sim,simRange,sMeta$param,K.est = T,
+example<-simTest(sMeta$sim,simRange,sMeta$param,K.est = T,
                         lfmm.test = T,cate.test = T,RFEM.test = F,SVA.test = T,dSVA.test = T,
-                        oracle.test = T,glm.test = T,rep.times = 20)
+                        oracle.test = T,glm.test = T,rep.times = 1)
+
+example<-simRead(SimRun = sMeta$sim,sim = sMeta$param,reps = 1)
+
+lfmm_out<-lfmm::lfmm_ridge(Y = example$Y.list[[1]],X = example$X.list[[1]],K =10)
+pca<-prcomp(example$Y.list[[1]])
+screeplot(pca)
+pval<-lfmm_test(Y = example$Y.list[[1]],X = example$X.list[[1]],lfmm = lfmm_out,calibrate = "gif")
+pval$gif
+hist(pval$pvalue)
+hist(pval$calibrated.pvalue)
+
+
 #dir.create("DATA/EWAS_Sims/quercus_Final_2018-04-19/Output")
 #saveRDS(baboon.Final01,"DATA/EWAS_Sims/quercus_Final_2018-04-19/Output/FinalSimMethod.Rdata")
 ## currently K.est needs to = T, otherwise script won't run
@@ -125,6 +138,8 @@ baboon.Final01<-simTest(sMeta$sim,simRange,sMeta$param,K.est = T,
 # saveRDS(sim.data,"DATA/EWAS_Sims/baboonfinal2_Sim1Rep20.Rdata")
 
 sim.data <- readRDS("SampleData/Output_baboonSim/baboonfinal2_Sim52Rep20.Rdata")
+
+sim.data <- readRDS("SampleData/Output_baboonSim/baboonfinal2_Sim52Rep20.Rdata")
 bestim<-sim.data$mcount.list[[1]]/sim.data$tcount.list[[1]]
 plot(sim.data$Y.list[[1]][,60]~bestim[,60])
 summary(lm(sim.data$Y.list[[1]][,60]~bestim[,60]))
@@ -132,12 +147,16 @@ summary(lm(sim.data$Y.list[[1]][,60]~bestim[,60]))
 CL<-sim.data$CL.list[[1]]
 mc<-sim.data$mcount.list[[1]]
 tc<-sim.data$tcount.list[[1]]
-x<-sim.data$X.list[[1]]
+x<-sim.data$X.list[[1]] # phenotype
+ll<-sim.data$B.list[[1]] # effect size of phenotype
 y<-as.matrix(sim.data$Y.list[[1]])
 lf<-sim.data$U.list[[1]]
 as.matrix(unlist(sim.data$U.list[[1]],ncol=4))
 
-
+summary(lm(x$V1~lf))
+screeplot(prcomp(y),type="l")
+covMat<-cor(lf[,1])
+?cor()
 
 p=2000
 i=1
@@ -146,6 +165,8 @@ m=max(tc[,i])
 fact<-cbind.data.frame(x=x$V1,lf)
 lo_z<-NULL
 lo_p<-NULL
+lom_z<-NULL
+lom_p<-NULL
 qop_z<-NULL
 qop_p<-NULL
 qoc_z<-NULL
@@ -154,15 +175,51 @@ bop_z<-NULL
 bop_p<-NULL
 boc_z<-NULL
 boc_p<-NULL
+bocm_z<-NULL
+bocm_p<-NULL
 pvalB1<-NULL
 zscoreB1<-NULL
 pvalB2<-NULL
 zscoreB2<-NULL
+
 for(i in 1:ncol(y)){
+  print(i)
+  print("1")
+  
+  linear_min<-summary(glm(y[,i]~x,
+                          data=fact))
+  lom_z[i]<-linear_min$coeff[2,3]
+  lom_p[i]<-linear_min$coeff[2,4]
+  b1<-summary(glm(y[,1]~.,
+                    data=fact,
+                 binomial(link="logit")))
+  b2<-summary(glm(y[,1]~.,
+                  data=fact,
+                  binomial(link="probit")))
+  anova(gaus,b1,b2)
+  
+  lom_z[i]<-gaus$coeff[2,3]
+  lom_p[i]<-linear_min$coeff[2,4]
+  
+  print("2")
+  binom_out_cmin<-summary(glm(cbind(mc[,i],tc[,i]-mc[,i])~x,
+                           binomial(link="logit"),
+                           data=fact))
+  
+  bocm_z[i]<-binom_out_cmin$coeff[2,3]
+  bocm_p[i]<-binom_out_cmin$coeff[2,4]
+}
+  
+  
   linear_out<-summary(glm(y[,i]~.,
                           data=fact))
   lo_z[i]<-linear_out$coeff[2,3]
   lo_p[i]<-linear_out$coeff[2,4]
+  
+  linear_min<-summary(glm(y[,i]~x,
+                          data=fact))
+  lom_z[i]<-linear_min$coeff[2,3]
+  lom_p[i]<-linear_min$coeff[2,4]
   
   quasi_out_p<-summary(glm(y[,i]~.,
                            quasibinomial(link="logit"),
@@ -191,6 +248,13 @@ for(i in 1:ncol(y)){
   boc_z[i]<-binom_out_c$coeff[2,3]
   boc_p[i]<-binom_out_c$coeff[2,4]
   
+  binom_out_cmin<-summary(glm(cbind(mc[,i],tc[,i]-mc[,i])~x,
+                              binomial(link="logit"),
+                              data=fact))
+  
+  bocm_z[i]<-binom_out_cmin$coeff[2,3]
+  bocm_p[i]<-binom_out_cmin$coeff[2,4]
+  
   bbinom_out_f<-betabin(cbind(mc[,i],tc[,i]-mc[,i])~.,~1,link = "logit",data=fact) # full beta binom
   bbinom_out_m<-betabin(cbind(mc[,i],tc[,i]-mc[,i])~x,~1,link = "logit",data=fact) # just x
   
@@ -212,7 +276,10 @@ for(i in 1:ncol(y)){
   print(i)
 }
 score.df<-data.frame(lo_z,qop_z,qoc_z,bop_z,boc_z,zscoreB1,zscoreB2)
-scoreFull.df<-data.frame(pos=c(1:2000),lo_z,qop_z,qoc_z,bop_z,boc_z,zscoreB1,zscoreB2)
+scoreFull.df<-data.frame(pos=c(1:2000),lo_z,qop_z,qoc_z,bop_z,boc_z,zscoreB1,zscoreB2,
+                         lom_z,bocm_z,x,ll)
+scoreFull.df$CL<-0
+scoreFull.df$CL[CL]<-1
 zscoreB1[zscoreB1 > 100]
 plot(abs(lo_z)~lo_p)
 plot(abs(lo_z)~abs(qop_z))
@@ -222,6 +289,20 @@ plot(abs(boc_z)~abs(qoc_z))
 plot(abs(boc_z)~abs(bop_z))
 plot(abs(boc_z)~abs(zscoreB2))
 plot(abs(boc_z)~abs(zscoreB1),xlim=c(0,60))
+plot(abs(zscoreB2)~abs(zscoreB1),xlim=c(0,60))
+
+ggplot(scoreFull.df,aes(x=abs(zscoreB1),y=abs(zscoreB2),colour=as.factor(CL))) + geom_point() +
+  xlim(0,75)
+ggplot(scoreFull.df,aes(x=abs(lo_z),y=abs(lom_z),colour=as.factor(CL))) + geom_point()
+ggplot(scoreFull.df,aes(x=abs(boc_z),y=abs(bocm_z),colour=as.factor(CL))) + geom_point()
+
+
+ggplot(scoreFull.df,aes(x=abs(lo_z),y=abs(ll),colour=as.factor(CL))) + geom_point()
+ggplot(scoreFull.df,aes(x=abs(boc_z),y=abs(ll),colour=as.factor(CL))) + geom_point()
+ggplot(scoreFull.df,aes(x=abs(zscoreB1),y=abs(ll),colour=as.factor(CL))) + geom_point() +
+  xlim(0,75)
+
+
 
 library(reshape2)
 full<-melt(score.df) # long data version
@@ -337,6 +418,16 @@ model
 
 working.q.df<-readRDS("DATA/EWAS_Sims/quercus_Final_2018-04-19/Output/FinalSimMethod.Rdata")$full.df
 
+sub<-subset(working.q.df,working.q.df$n == 500)
+sub
+q.df<-readRDS("DATA/EWAS_Sims/quercus_Final_2018-04-19/Output/FinalSimMethod.Rdata")
+q.df$full.df
+q
+values<-q.df[[2]][[3]][[1]]
+new.val<-values[[1]]
+new.val[,1]
+hist(new.val[,1])
+colnames(values)
 ss<-working.q.df
 ss.sub <- subset(ss,ss$n == 250)
 ss.sub <- subset(ss.sub,ss.sub$p == 2000)

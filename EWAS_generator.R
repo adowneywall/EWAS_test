@@ -60,8 +60,9 @@ ewas_generator <- function (n, # sample#
   B[outlier, 1] <- rnorm(outlier.nb, mean.B, sd.B) # some small proportion do have an effect (magnitude of effect controlled by user)
   
   # Random effects 
-  Epsilon = MASS::mvrnorm(n, mu = rep(0, p), Sigma = sigma^2 * diag(p))
-  
+  #Epsilon = MASS::mvrnorm(n, mu = rep(0, p), Sigma = sigma^2 * diag(p))
+  Epsilon = matrix(rnorm(n*p,sd=sigma),nrow=n)
+  #dim(Epsilon2)
   # Adding fixed factors (X *%* t(B)), 
   # latent factors (U *%* t(V)), 
   # and random effects (Epsilon) to determine DNA methylation (Y)
@@ -82,9 +83,11 @@ ewas_generator <- function (n, # sample#
   # to 0.5. This follows the behavior seen in most empirical datasets.
   
   Y.raw = M.ord + Z.ord
+  Y2.raw = M + Z
   Y.raw = Y.raw[,order(o.order)]
   Y.logit = exp(Y.raw)/(1+exp(Y.raw)) 
   Y = pnorm(Y.raw)
+  Y2 = pnorm(Y2.raw)
   
   # Generated a matrix of same dimension as Y (beta vals), but with 'read counts' simulating the number of reads for 
   # each locus for each individual. Standardized to minimum 10 reads using negative binomial distributions from empirical data  if(!is.null(nb.t)){
@@ -111,6 +114,7 @@ ewas_generator <- function (n, # sample#
   }
   #Y.collapse = apply(Y,2,function(x){collapse(x)}) # outdated 
   return(list(Y = Y, #beta values
+              Y2 = Y2, # unordered beta values
               Y.raw = Y.raw, # beta-values before pnorm adjustment
               Y.logit = Y.logit,
               t.reads=t.r,
@@ -314,6 +318,9 @@ multi.sim.gen<-function(n,
                 row.names = F)
       write.csv(x=temp.scenario$Y.logit,
                 file = paste(rep.fold,"/Ylogit_",s.sub$n[i],"_",s.sub$p[i],"_",s.sub$prop.variance[i],"_",s.sub$mean.B[i],".csv",sep=""),
+                row.names = F)
+      write.csv(x=temp.scenario$Y2,
+                file = paste(rep.fold,"/Y2_",s.sub$n[i],"_",s.sub$p[i],"_",s.sub$prop.variance[i],"_",s.sub$mean.B[i],".csv",sep=""),
                 row.names = F)
       write.csv(x=temp.scenario$X,
                 file = paste(rep.fold,"/X_",s.sub$n[i],"_",s.sub$p[i],"_",s.sub$prop.variance[i],"_",s.sub$mean.B[i],".csv",sep=""),
