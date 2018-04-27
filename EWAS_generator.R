@@ -67,27 +67,27 @@ ewas_generator <- function (n, # sample#
   # latent factors (U *%* t(V)), 
   # and random effects (Epsilon) to determine DNA methylation (Y)
   
-  o.order<-c(1:p)
+  ##o.order<-c(1:p)
   Z = U %*% t(V) + X %*% t(B) + Epsilon #add together all matrices of variation
   
-  rZ<-rev(order(abs(rowMeans(t(Z))))) # order rows of matrix by level of variation
-  o.order<-o.order[rZ]
-  Z.ord<-t(t(Z)[rZ,])
+  ##rZ<-rev(order(abs(rowMeans(t(Z))))) # order rows of matrix by level of variation
+  ##o.order<-o.order[rZ]
+  ##Z.ord<-t(t(Z)[rZ,])
   # measure of methylation mean (generally pulled from a distribution of true means (or medians) from 
   # a real data set.)
   M = matrix(rep(qnorm(freq),n) , nrow = n, byrow = T)
-  rM<-order((abs(rowMeans(t(M)-0.5))))
-  M.ord<-(t(t(M)[rM,]))
+  ##rM<-order((abs(rowMeans(t(M)-0.5))))
+  ##M.ord<-(t(t(M)[rM,]))
   
   # Both mean values and variation have been order to assign the most variation to SMPs with mean values closer
   # to 0.5. This follows the behavior seen in most empirical datasets.
   
-  Y.raw = M.ord + Z.ord
-  Y2.raw = M + Z
-  Y.raw = Y.raw[,order(o.order)]
-  Y.logit = exp(Y.raw)/(1+exp(Y.raw)) 
-  Y = pnorm(Y.raw)
-  Y2 = pnorm(Y2.raw)
+  ##Y.raw = M.ord + Z.ord
+  Y.raw = M + Z
+  ##Y.raw = Y.raw[,order(o.order)]
+  Y = exp(Y.raw)/(1+exp(Y.raw)) 
+  #Y = pnorm(Y.raw)
+  #Y2 = pnorm(Y2.raw)
   
   # Generated a matrix of same dimension as Y (beta vals), but with 'read counts' simulating the number of reads for 
   # each locus for each individual. Standardized to minimum 10 reads using negative binomial distributions from empirical data  if(!is.null(nb.t)){
@@ -113,10 +113,10 @@ ewas_generator <- function (n, # sample#
     #m.rYlog<-NULL
   }
   #Y.collapse = apply(Y,2,function(x){collapse(x)}) # outdated 
-  return(list(Y = Y, #beta values
-              Y2 = Y2, # unordered beta values
-              Y.raw = Y.raw, # beta-values before pnorm adjustment
-              Y.logit = Y.logit,
+  return(list(#Y = Y, #beta values
+              Y = Y, # unordered beta values
+              #Y.raw = Y.raw, # beta-values before pnorm adjustment
+              #Y.logit = Y.logit,
               t.reads=t.r,
               m.reads=m.r,
               #Y.collapse = Y.collapse, # beta-values collapsed into a 0-0.5 or 1-0.5 range
@@ -313,35 +313,42 @@ multi.sim.gen<-function(n,
                                     nb.t = nb.t)
       rep.fold<-paste(new.folder.name,"/Rep",s.sub$Rep[i],sep="")
       dir.create(rep.fold)
-      write.csv(x=temp.scenario$Y,
-                file = paste(rep.fold,"/Y_",s.sub$n[i],"_",s.sub$p[i],"_",s.sub$prop.variance[i],"_",s.sub$mean.B[i],".csv",sep=""),
-                row.names = F)
-      write.csv(x=temp.scenario$Y.logit,
-                file = paste(rep.fold,"/Ylogit_",s.sub$n[i],"_",s.sub$p[i],"_",s.sub$prop.variance[i],"_",s.sub$mean.B[i],".csv",sep=""),
-                row.names = F)
-      write.csv(x=temp.scenario$Y2,
-                file = paste(rep.fold,"/Y2_",s.sub$n[i],"_",s.sub$p[i],"_",s.sub$prop.variance[i],"_",s.sub$mean.B[i],".csv",sep=""),
-                row.names = F)
-      write.csv(x=temp.scenario$X,
-                file = paste(rep.fold,"/X_",s.sub$n[i],"_",s.sub$p[i],"_",s.sub$prop.variance[i],"_",s.sub$mean.B[i],".csv",sep=""),
-                row.names = F)
-      write.csv(x=temp.scenario$U,
-                file = paste(rep.fold,"/U_",s.sub$n[i],"_",s.sub$p[i],"_",s.sub$prop.variance[i],"_",s.sub$mean.B[i],".csv",sep=""),
-                row.names = F)
-      write.csv(x=temp.scenario$V,
-                file = paste(rep.fold,"/V_",s.sub$n[i],"_",s.sub$p[i],"_",s.sub$prop.variance[i],"_",s.sub$mean.B[i],".csv",sep=""),
-                row.names = F)
-      write.csv(x=temp.scenario$B,
-                file = paste(rep.fold,"/B_",s.sub$n[i],"_",s.sub$p[i],"_",s.sub$prop.variance[i],"_",s.sub$mean.B[i],".csv",sep=""),
-                row.names = F)
-      
-      write.csv(x=temp.scenario$covar.mat,file = paste(rep.fold,"/covar_",s.sub$n[i],"_",s.sub$p[i],"_",s.sub$prop.variance[i],"_",s.sub$mean.B[i],".csv",sep=""))
-      write.csv(x=temp.scenario$causal, file = paste(rep.fold,"/causalLoci_",s.sub$n[i],"_",s.sub$p[i],"_",s.sub$prop.variance[i],"_",s.sub$mean.B[i],".csv",sep=""))
-      write.csv(x=temp.scenario$freq, file = paste(rep.fold,"/simMeans_",s.sub$n[i],"_",s.sub$p[i],"_",s.sub$prop.variance[i],"_",s.sub$mean.B[i],".csv",sep=""))
-      if(!is.null(nb.t)){
-        write.csv(x=temp.scenario$t.reads,file = paste(rep.fold,"/tReads_",s.sub$n[i],"_",s.sub$p[i],"_",s.sub$prop.variance[i],"_",s.sub$mean.B[i],".csv",sep=""))
-        write.csv(x=temp.scenario$m.reads,file = paste(rep.fold,"/mReads_",s.sub$n[i],"_",s.sub$p[i],"_",s.sub$prop.variance[i],"_",s.sub$mean.B[i],".csv",sep=""))
-      }
+      saveRDS(temp.scenario,
+              file = paste(rep.fold,
+                           "/",s.sub$n[i],
+                           "_",s.sub$p[i],
+                           "_",s.sub$prop.variance[i],
+                           "_",s.sub$mean.B[i],
+                           ".Rdata",sep=""))
+      # write.csv(x=temp.scenario$Y,
+      #           file = paste(rep.fold,"/Y_",s.sub$n[i],"_",s.sub$p[i],"_",s.sub$prop.variance[i],"_",s.sub$mean.B[i],".csv",sep=""),
+      #           row.names = F)
+      # write.csv(x=temp.scenario$Y.logit,
+      #           file = paste(rep.fold,"/Ylogit_",s.sub$n[i],"_",s.sub$p[i],"_",s.sub$prop.variance[i],"_",s.sub$mean.B[i],".csv",sep=""),
+      #           row.names = F)
+      # write.csv(x=temp.scenario$Y2,
+      #           file = paste(rep.fold,"/Y2_",s.sub$n[i],"_",s.sub$p[i],"_",s.sub$prop.variance[i],"_",s.sub$mean.B[i],".csv",sep=""),
+      #           row.names = F)
+      # write.csv(x=temp.scenario$X,
+      #           file = paste(rep.fold,"/X_",s.sub$n[i],"_",s.sub$p[i],"_",s.sub$prop.variance[i],"_",s.sub$mean.B[i],".csv",sep=""),
+      #           row.names = F)
+      # write.csv(x=temp.scenario$U,
+      #           file = paste(rep.fold,"/U_",s.sub$n[i],"_",s.sub$p[i],"_",s.sub$prop.variance[i],"_",s.sub$mean.B[i],".csv",sep=""),
+      #           row.names = F)
+      # write.csv(x=temp.scenario$V,
+      #           file = paste(rep.fold,"/V_",s.sub$n[i],"_",s.sub$p[i],"_",s.sub$prop.variance[i],"_",s.sub$mean.B[i],".csv",sep=""),
+      #           row.names = F)
+      # write.csv(x=temp.scenario$B,
+      #           file = paste(rep.fold,"/B_",s.sub$n[i],"_",s.sub$p[i],"_",s.sub$prop.variance[i],"_",s.sub$mean.B[i],".csv",sep=""),
+      #           row.names = F)
+      # 
+      # write.csv(x=temp.scenario$covar.mat,file = paste(rep.fold,"/covar_",s.sub$n[i],"_",s.sub$p[i],"_",s.sub$prop.variance[i],"_",s.sub$mean.B[i],".csv",sep=""))
+      # write.csv(x=temp.scenario$causal, file = paste(rep.fold,"/causalLoci_",s.sub$n[i],"_",s.sub$p[i],"_",s.sub$prop.variance[i],"_",s.sub$mean.B[i],".csv",sep=""))
+      # write.csv(x=temp.scenario$freq, file = paste(rep.fold,"/simMeans_",s.sub$n[i],"_",s.sub$p[i],"_",s.sub$prop.variance[i],"_",s.sub$mean.B[i],".csv",sep=""))
+      # if(!is.null(nb.t)){
+      #   write.csv(x=temp.scenario$t.reads,file = paste(rep.fold,"/tReads_",s.sub$n[i],"_",s.sub$p[i],"_",s.sub$prop.variance[i],"_",s.sub$mean.B[i],".csv",sep=""))
+      #   write.csv(x=temp.scenario$m.reads,file = paste(rep.fold,"/mReads_",s.sub$n[i],"_",s.sub$p[i],"_",s.sub$prop.variance[i],"_",s.sub$mean.B[i],".csv",sep=""))
+      # }
       
       print(paste("....Rep ",j," of ",rep,sep=""))
     }

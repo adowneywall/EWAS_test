@@ -75,20 +75,21 @@ b.pca<-prcomp(b.cpg$B)
 screeplot(b.pca) # really only one pc here
 b.pca.sd<-b.pca$sdev[1:10] # possible include more if you want to include more pcs in sims
 
-multi.sim.gen(n=c(50),
+multi.sim.gen(n=c(50,250,500),
               p=c(2000),
-              K=c(1),
+              K=c(1,3),
               freq=freq.multi,
-              prop.variance = 0.4,#seq(from=0.1,to=0.9,by=.1),
-              sigma=0.2,
-              mean.B = c(1), 
+              prop.variance = seq(from=0.1,to=0.9,by=.2),
+              sigma=0.4,
+              mean.B = c(1,3), 
               sd.U=b.pca.sd,
-              sd.Um=1,
+              sd.Um=0.2,
               sd.Usd=0.1,
-              rep=1,
+              sd.V=.5,
+              rep=20,
               nb.t = nb.baboon,
               dir.name = "DATA/EWAS_Sims/", 
-              sim.folder = "baboon.test")
+              sim.folder = "baboon.ReRun")
 
 ## Examining the performance of difference methods on simulated baboon data
 sim.folder<-"baboon.test_2018-04-27/"
@@ -137,14 +138,13 @@ hist(pval$calibrated.pvalue)
 # sim.data<-simRead(sim.folder,sim,reps)
 # saveRDS(sim.data,"DATA/EWAS_Sims/baboonfinal2_Sim1Rep20.Rdata")
 
-sim.data <- readRDS("SampleData/Output_baboonSim/baboonfinal2_Sim52Rep20.Rdata")
+sim.data <- readRDS("SampleData/Output_baboonSim/baboonfinal2_Sim52Rep20.Rdata")\
 
 sim.data <- readRDS("SampleData/Output_baboonSim/baboonfinal2_Sim52Rep20.Rdata")
 bestim<-sim.data$mcount.list[[1]]/sim.data$tcount.list[[1]]
 plot(sim.data$Y.list[[1]][,60]~bestim[,60])
 summary(lm(sim.data$Y.list[[1]][,60]~bestim[,60]))
 
-CL<-sim.data$CL.list[[1]]
 mc<-sim.data$mcount.list[[1]]
 tc<-sim.data$tcount.list[[1]]
 x<-sim.data$X.list[[1]] # phenotype
@@ -317,57 +317,6 @@ ggplot(scoreFull.df,aes(x=pos,y=abs(zscoreB2))) + geom_point(alpha=0.2) +
 ggplot(full,aes(x=pos,y=abs(value),group=variable,colour=variable)) + 
   geom_point(aes(alpha=0.2)) +
   geom_vline(xintercept = c(CL),alpha=0.2)
-
-
-
-
-
-
-
-
-
-for(i in 1:p){
-  xFull<- cbind.data.frame(y=mc[,i],n=tc[,i],x=x$V1,lf)
-  R <- cbind.data.frame(y=mc[,i],n=tc[,i],u=lf)
-  bEst1<-betabin(cbind(y,n-y)~x,~1,link = "logit",data=xFull)
-  bEst2<-betabin(cbind(R$y,R$n-R$y)~x + V1 + V2 + V3,~1,link = "logit",data=xFull)
-  glmE1<-glm(cbind(y,n-y)~x,binomial(link="logit"),data = xFull)
-  glmE2<-glm(cbind(y,n-y)~x + V1 + V2 + V3,binomial(link="logit"),data = xFull)
-  
-  zscoreB1[i]<-bEst1@fixed.param[2]/sqrt(bEst1@varparam[2,2])
-  pvalB1[i]<-2 * (1 - pnorm(abs(zscoreB1)))
-  
-  zscoreB2[i]<-bEst2@fixed.param[2]/sqrt(bEst2@varparam[2,2])
-  pvalB2[i]<-2 * (1 - pnorm(abs(zscoreB2)))
-  
-  zscoreE1[i]<-summary(glmE1)$coeff[2,3] 
-  pvalE1[i]<-summary(glmE1)$coeff[2,4] 
-  
-  zscoreE2[i]<-summary(glmE2)$coeff[2,3] 
-  pvalE2[i]<-summary(glmE2)$coeff[2,4] 
-  print(i)
-  }
-
-B1FDR<-fdrtool(zscoreB1)
-B2FDR<-fdrtool(zscoreB2)
-E1FDR<-fdrtool(zscoreE1)
-E2FDR<-fdrtool(zscoreE2)
-CL.new<-CL[CL<1454]
-
-temp<-B1FDR
-length(temp$qval)
-plot(-log(temp$qval)~c(1:1454))
-points(x=CL.new,y=-log(temp$qval)[CL.new],col="red",pch=16)
-points(x=c(1:1454)[temp$lfdr<0.05],y=-log(temp$qval)[temp$lfdr<0.05],col="blue",pty=5,pch=25)
-hist(temp$lfdr)
-
-pvals<-cbind.data.frame(loci=1:p,pval)
-hist(-log(pvals$pval))
-plot(-log(pvals$pval)~pvals$loci)
-points(y=-log(pvals$pval[CL]),x=CL,
-      col="red",pch=16)
-
-
 
 #### Example BBmm ####
 ?BBmm()

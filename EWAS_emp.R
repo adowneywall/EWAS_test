@@ -77,21 +77,23 @@ multi.sim.gen(n=c(50),
               K=c(1),
               freq=freq.multi,
               prop.variance = 0.4,#seq(from=0.1,to=0.9,by=.1),
-              sigma=0.2,
+              sigma=0.4,
               mean.B = c(1), 
               sd.U=b.pca.sd,
-              sd.Um=0.3,
+              sd.Um=0.2,
               sd.Usd=0.1,
-              sd.V=0.2,
+              sd.V=0.5,
               rep=1,
               nb.t = nb.baboon,
               dir.name = "DATA/EWAS_Sims/", 
-              sim.folder = "baboon.test")
+              sim.folder = "baboon.Rerun")
 
 ## Examining the performance of difference methods on simulated baboon data
 sim.folder<-"baboon.test_2018-04-27/"
 example<-simRead(SimRun = sMeta$sim,sim = sMeta$param,reps = 1)
-example$Y2.list
+sim.dat<-readRDS("DATA/EWAS_Sims/baboon.test2_2018-04-27/Sim1/Rep150_2000_0.4_1.Rdata")
+sim.dat.Y<-sim.dat$Y
+dim(sim.dat.Y)
 lfmm_out<-lfmm::lfmm_ridge(Y = example$Y2.list[[1]],X = example$X.list[[1]],K =1)
 pval<-lfmm_test(Y = example$Y.list[[1]],X = example$X.list[[1]],lfmm = lfmm_out,calibrate = "gif")
 
@@ -110,7 +112,7 @@ hist(b.mean.sim)
 hist(b.median.sim)
 hist(b.sd.sim,xlim=c(0,1))
 b.sim.sum<-cbind.data.frame(mean=b.mean.sim,median=b.median.sim,sd=b.sd.sim)
-ggplot(b.sim.sum,aes(x=median,y=sd)) + geom_point()
+ggplot(b.sim.sum,aes(x=mean,y=sd)) + geom_point()
 
 # Baboon data with predictor ####
 b.b<-b.cpg$B # create Y (methylation data)
