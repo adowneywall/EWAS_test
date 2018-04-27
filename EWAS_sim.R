@@ -107,8 +107,6 @@ baboon.Final01<-simTest(sMeta$sim,simRange,sMeta$param,K.est = T,
 #saveRDS(baboon.Final01,"DATA/EWAS_Sims/quercus_Final_2018-04-19/Output/FinalSimMethod.Rdata")
 ## currently K.est needs to = T, otherwise script won't run
 
-
-
 #### Testing alternative regression methods ####
 ### Baboon Sample rerun with count data
 # sim.folder<-"baboon.final2_2018-04-24/"
@@ -126,8 +124,7 @@ baboon.Final01<-simTest(sMeta$sim,simRange,sMeta$param,K.est = T,
 # sim.data<-simRead(sim.folder,sim,reps)
 # saveRDS(sim.data,"DATA/EWAS_Sims/baboonfinal2_Sim1Rep20.Rdata")
 
-
-sim.data <- readRDS("DATA/EWAS_Sims/baboonfinal2_Sim1Rep20.Rdata")
+sim.data <- readRDS("SampleData/Output_baboonSim/baboonfinal2_Sim52Rep20.Rdata")
 bestim<-sim.data$mcount.list[[1]]/sim.data$tcount.list[[1]]
 plot(sim.data$Y.list[[1]][,60]~bestim[,60])
 summary(lm(sim.data$Y.list[[1]][,60]~bestim[,60]))
@@ -136,27 +133,123 @@ CL<-sim.data$CL.list[[1]]
 mc<-sim.data$mcount.list[[1]]
 tc<-sim.data$tcount.list[[1]]
 x<-sim.data$X.list[[1]]
-y<-sim.data$Y.list[[1]]
+y<-as.matrix(sim.data$Y.list[[1]])
 lf<-sim.data$U.list[[1]]
-dim(mc)
+as.matrix(unlist(sim.data$U.list[[1]],ncol=4))
+
+
+
 p=2000
 i=1
 m=max(tc[,i])
+
+fact<-cbind.data.frame(x=x$V1,lf)
+lo_z<-NULL
+lo_p<-NULL
+qop_z<-NULL
+qop_p<-NULL
+qoc_z<-NULL
+qoc_p<-NULL
+bop_z<-NULL
+bop_p<-NULL
+boc_z<-NULL
+boc_p<-NULL
 pvalB1<-NULL
 zscoreB1<-NULL
 pvalB2<-NULL
 zscoreB2<-NULL
-pvalE1<-NULL
-zscoreE1<-NULL
-pvalE2<-NULL
-zscoreE2<-NULL
+for(i in 1:ncol(y)){
+  linear_out<-summary(glm(y[,i]~.,
+                          data=fact))
+  lo_z[i]<-linear_out$coeff[2,3]
+  lo_p[i]<-linear_out$coeff[2,4]
+  
+  quasi_out_p<-summary(glm(y[,i]~.,
+                           quasibinomial(link="logit"),
+                           data=fact))
+  qop_z[i]<-quasi_out_p$coeff[2,3]
+  qop_p[i]<-quasi_out_p$coeff[2,4]
+  
+  quasi_out_c<-summary(glm(cbind(mc[,i],tc[,i]-mc[,i])~.,
+                           quasibinomial(link="logit"),
+                           data=fact))
+  qoc_z[i]<-quasi_out_c$coeff[2,3]
+  qoc_p[i]<-quasi_out_c$coeff[2,4]
+  
+  #fact<-cbind.data.frame(x$V1,lf)
+  binom_out_p<-summary(glm(y[,i]~.,
+                           binomial(link="logit"),
+                           data=fact))
+  
+  bop_z[i]<-binom_out_p$coeff[2,3]
+  bop_p[i]<-binom_out_p$coeff[2,4]
+  
+  binom_out_c<-summary(glm(cbind(mc[,i],tc[,i]-mc[,i])~.,
+                           binomial(link="logit"),
+                           data=fact))
+  
+  boc_z[i]<-binom_out_c$coeff[2,3]
+  boc_p[i]<-binom_out_c$coeff[2,4]
+  
+  bbinom_out_f<-betabin(cbind(mc[,i],tc[,i]-mc[,i])~.,~1,link = "logit",data=fact) # full beta binom
+  bbinom_out_m<-betabin(cbind(mc[,i],tc[,i]-mc[,i])~x,~1,link = "logit",data=fact) # just x
+  
+  if(!is.na(bbinom_out_f@varparam)){
+    zscoreB1[i]<-bbinom_out_f@fixed.param[2]/sqrt(bbinom_out_f@varparam[2,2])
+    pvalB1[i]<-2 * (1 - pnorm(abs(zscoreB1)))
+  }else{
+    zscoreB1[i]<-999
+    pvalB1[i]<-999
+  }
+  
+  if(!is.na(bbinom_out_m@varparam)){
+    zscoreB2[i]<-bbinom_out_m@fixed.param[2]/sqrt(bbinom_out_m@varparam[2,2])
+    pvalB2[i]<-2 * (1 - pnorm(abs(zscoreB2)))
+  }else{
+    zscoreB2[i]<-999
+    pvalB2[i]<-999
+  }
+  print(i)
+}
+score.df<-data.frame(lo_z,qop_z,qoc_z,bop_z,boc_z,zscoreB1,zscoreB2)
+scoreFull.df<-data.frame(pos=c(1:2000),lo_z,qop_z,qoc_z,bop_z,boc_z,zscoreB1,zscoreB2)
+zscoreB1[zscoreB1 > 100]
+plot(abs(lo_z)~lo_p)
+plot(abs(lo_z)~abs(qop_z))
+plot(abs(lo_z)~abs(qoc_z))
+plot(abs(qop_z)~abs(qoc_z))
+plot(abs(boc_z)~abs(qoc_z))
+plot(abs(boc_z)~abs(bop_z))
+plot(abs(boc_z)~abs(zscoreB2))
+plot(abs(boc_z)~abs(zscoreB1),xlim=c(0,60))
+
+library(reshape2)
+full<-melt(score.df) # long data version
+full$pos<-rep(c(1:2000),7) # add relative positions
+full<-subset(full,full$value < 250)
+
+ggplot(scoreFull.df,aes(x=pos,y=abs(zscoreB2))) + geom_point(alpha=0.2) +
+  geom_point(aes(x=CL,y=scoreFull.df$zscoreB2[CL],alpha=0.2))
+  geom_vline(xintercept = c(CL),alpha=0.2)
+
+### Full melted plot
+ggplot(full,aes(x=pos,y=abs(value),group=variable,colour=variable)) + 
+  geom_point(aes(alpha=0.2)) +
+  geom_vline(xintercept = c(CL),alpha=0.2)
+
+
+
+
+
+
+
+
 
 for(i in 1:p){
   xFull<- cbind.data.frame(y=mc[,i],n=tc[,i],x=x$V1,lf)
   R <- cbind.data.frame(y=mc[,i],n=tc[,i],u=lf)
   bEst1<-betabin(cbind(y,n-y)~x,~1,link = "logit",data=xFull)
   bEst2<-betabin(cbind(R$y,R$n-R$y)~x + V1 + V2 + V3,~1,link = "logit",data=xFull)
-  #bEst2<-BBmm(fixed.formula = y~x+V1,~rep(1,length(y)),m=n,data=xFull)
   glmE1<-glm(cbind(y,n-y)~x,binomial(link="logit"),data = xFull)
   glmE2<-glm(cbind(y,n-y)~x + V1 + V2 + V3,binomial(link="logit"),data = xFull)
   
@@ -195,7 +288,7 @@ points(y=-log(pvals$pval[CL]),x=CL,
 
 
 
-
+#### Example BBmm ####
 ?BBmm()
 # Defining the parameters
 k <- 100

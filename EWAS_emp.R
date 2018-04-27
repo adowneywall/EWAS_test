@@ -5,6 +5,7 @@ source("EWAS_generator.R")
 source("EWAS_methodTest.R")
 library(lfmm)
 library(fdrtool)
+library(ggplot2)
 ### Reading in process empirical data ####
 
 ## Quercus
@@ -62,30 +63,32 @@ b.meta<-b.cpg$metadata
 b.b.X<-as.matrix(b.X) # X
 
 ### Model fitting (only run if necessary -  it will be slow) ####
-# mod.lfmm <- lfmm::lfmm_ridge(t(b.b),b.b.X, K = 1) #lfmm estimate of latent factors
-#lfmmTest<-lfmm_test(t(b.b),b.b.X,lfmm=mod.lfmm)
-#l.fdr.adj<-fdrtool(as.vector(lfmmTest$score),statistic = c("normal"),verbose = F,plot = T)
+library(lfmm)
+library(fdrtool)
+mod.lfmm <- lfmm::lfmm_ridge(t(b.b),b.b.X, K = 1) #lfmm estimate of latent factors
+lfmmTest<-lfmm_test(t(b.b),b.b.X,lfmm=mod.lfmm)
+l.fdr.adj<-fdrtool(as.vector(lfmmTest$score),statistic = c("normal"),verbose = F,plot = T)
+l.fdr.adj$lfdr[l.fdr.adj$lfdr < 0.05]
 # b.b[which(b.b > 1)] <- 1 # converts all methylation values over 1 to 1.
 # scores<-binomal.glm.test(t(b.b),b.b.X,mod.lfmm$U) # glm with probit link function (beta distr.)
 # fdr.adj<-fdrtool(scores[,2],statistic = c("normal"),verbose = F,plot = T) #for evaluating fdrtools
 # lfmm.list<-list(scores=scores,fdrTool=fdr.adj)
 # saveRDS(lfmm.list,"DATA/Empirical_Data/baboon_example/lfmm_BinomLogit_raw.Rdata")
-#lfmm.linear.list<-list(lfmm_Output=lfmmTest,fdrTool=l.fdr.adj)
-#saveRDS(lfmm.list,"DATA/Empirical_Data/baboon_example/lfmm_linear_raw.Rdata")
+lfmm.linear.list<-list(lfmm_Output=lfmmTest,fdrTool=l.fdr.adj)
+saveRDS(lfmm.linear.list,"SampleData/Empirical_Data/baboon_example/lfmm_linear_raw.Rdata")
 
 ### Figures and Analysis ####
-lfmm.sig<-readRDS("DATA/Empirical_Data/baboon_example/lfmm_BinomLogit_raw.Rdata")
-lfmm.linear<-readRDS("DATA/Empirical_Data/baboon_example/lfmm_linear_raw.Rdata")
+lfmm.sig<-readRDS("SampleData/Empirical_Data/baboon_example/lfmm_BinomLogit_raw.Rdata")
+lfmm.linear<-readRDS("SampleData/Empirical_Data/baboon_example/lfmm_linear_raw.Rdata")
 
 b.lfmm<-cbind.data.frame(b.meta,qval=lfmm.sig$fdrTool$qval)
 b.lfmm$sig<-"Insignificant"
 b.lfmm$sig[lfmm.sig$fdrTool$lfdr <= 0.05] <- "Significant"
 ggplot(b.lfmm,aes(x=c(1:nrow(b.lfmm)),y=-log10(qval),colour=sig)) + geom_point()
 
-linear.lfmm <- cbind.data.frame(b.meta,lfmmTest$calibrated.pvalue,qval=l.fdr.adj$qval)
+linear.lfmm <- cbind.data.frame(b.meta,qval=lfmm.linear$qval)
 linear.lfmm$sig <-  "Insiginificant"
-linear.lfmm$sig[lfmm.sig$fdrTool$lfdr <= 0.05] <-  "Significant"
-linear.lfmm$sig[l.fdr.adj$lfdr <= 0.05] <-  "Significant"
+linear.lfmm$sig[lfmm.linear$fdrTool$lfdrl <= 0.05] <-  "Significant"
 ggplot(linear.lfmm,aes(x=c(1:nrow(linear.lfmm)),y=-log10(qval),colour=sig)) + geom_point()
 
 ### Quercus data w/ predictor

@@ -1,0 +1,317 @@
+---
+title: "EWAS_performance"
+author: "adowneywall"
+date: "April 26, 2018"
+output: html_document
+---
+  
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+require(dplyr)
+require(ggplot2)
+
+
+## Quercus
+q.cpg<-readRDS("SampleData/Empirical_Data/quercus_example/cpg_pruned.RData") # CpG
+q.chh<-readRDS("SampleData/Empirical_Data/quercus_example/chh_pruned.RData") # CHH
+q.chg<-readRDS("SampleData/Empirical_Data/quercus_example/chg_pruned.RData") # CHG
+q.pred<-readRDS("SampleData/Empirical_Data/quercus_example/predictors.RData") # predictor variable
+
+## Baboon
+b.cpg <- readRDS("SampleData/Empirical_Data/baboon_example/baboon_prune.RData") # CpG
+b.X<-read.table(file ="SampleData/Empirical_Data/baboon_example/BSSeq_Baboon/predictor_n50.txt") # predictor
+b.kin<-read.table(file="SampleData/Empirical_Data/baboon_example/BSSeq_Baboon/relatedness_n50.txt") # kinship matrix
+```
+
+# Empiricial Datasets  
+
+####**Species**:  
+#####*Baboon*:  
+Number of individuals: **50**  
+Sequencing: **RRBS**  
+Methylation Motif: **CpG**  
+Data Format: **Read Count Data** (this was converted into proprotion data, beta-values, by dividing the $\frac{number of methylated reads}{number of total reads}$)  
+**Final filtered dataset Criteria**:  
+```{r echo=FALSE}
+b.cpg$pruneData
+```
+*NAr*: Threshold of missing values (0=no missing values allowed).
+*bmeanL*: The lower cut-off for mean locus methylation.
+*bmeanU*: The upper cut-off for mean locus methylation.
+*bsd*: Cut-off for standard deviation.
+*Total_Loci*: Initial number of loci.
+*Remaining_Loci*: Number after filtering.  
+
+#####*Oak (Quercus lobas)*:  
+Number of individuals: **58**  
+Sequencing: **RRBS**  
+Methylation Motif: **CpG**,**CHG**,**CHH**  
+Data Format: **'Beta-values'** (proportion data)  
+**Final filtered dataset Criteria**:
+**CpG**  
+```{r echo=FALSE}
+q.cpg$pruneData
+```
+**CHG**  
+```{r echo=FALSE}
+q.chg$pruneData
+```
+**CHH**  
+```{r echo=FALSE}
+q.chh$pruneData
+```
+*NAr*: Threshold of missing values (0=no missing values allowed).
+*bmeanL*: The lower cut-off for mean locus methylation.
+*bmeanU*: The upper cut-off for mean locus methylation.
+*bsd*: Cut-off for standard deviation.*
+*Total_Loci*: Initial number of loci.
+*Remaining_Loci*: Number after filtering.  
+
+**Distribution of mean methylation across loci for each species**:
+```{r violin plot, echo=FALSE}
+q.cpg.means<-data.frame(x="Q-CpG",y=q.cpg$means)
+q.chh.means<-data.frame(x="Q-CHH",y=q.chh$means)
+q.chg.means<-data.frame(x="Q-CHG",y=q.chg$means)
+baboon<-data.frame(x="Baboon",y=b.cpg$means)
+species.means<-rbind(q.cpg.means,q.chh.means,q.chg.means,baboon)
+ggplot(species.means,aes(x=x,y=y)) + geom_violin() + labs(y="Mean B-values",x="") +
+  theme_bw()
+```
+  
+### **Indentifying K (using PCA)**  
+
+```{r PCA Anaylsis, echo=TRUE}
+# Baboon Data
+b.cpg.pca<-prcomp(b.cpg$B)
+screeplot(b.cpg.pca)
+
+# Oak Data
+
+## CPG
+q.cpg.pca<-prcomp(q.cpg$B)
+screeplot(q.cpg.pca,type='l')
+
+##CHG
+q.chg.pca<-prcomp(q.chg$B)
+screeplot(q.chg.pca)
+
+
+## CHH
+q.chh.pca<-prcomp(q.chh$B)
+screeplot(q.chh.pca)
+
+## All show little variation explained beyond the first PC.
+```
+
+## Baboon Association Analysis  
+  
+#### Using logistic regression (binomial(link=logit))
+```{r Baboon Analysis with lfmm (CpG) linear, echo=T}
+b.b<-b.cpg$B # methylation data
+b.meta<-b.cpg$metadata # meta data about locus location on chromosome
+b.b.X<-as.matrix(b.X) # predictor
+
+# Regression results using lfmm
+## K = 1 (based on scree plots)
+## method = Ridge
+## pvalues (qvalues) = adjusted using FDRtools (results also saved in list below)
+
+# binomial(link = 'logit') with glm
+lfmm.binom<-readRDS("SampleData/Empirical_Data/baboon_example/lfmm_BinomLogit_raw.Rdata")
+# Results with binom(link='logit') regression using lfmm latent factors in model
+b.lfmm<-cbind.data.frame(b.meta,qval=lfmm.binom$fdrTool$qval)
+b.lfmm$sig<-"Insignificant"
+# I used a 5% FDR threshold (as determined using the local FDR method from FDRtools)
+b.lfmm$sig[lfmm.binom$fdrTool$lfdr <= 0.05] <- "Significant"
+ggplot(b.lfmm,aes(x=c(1:nrow(b.lfmm)),y=-log10(qval),colour=sig)) + geom_point()
+```
+  
+  
+#### Using linear regression
+```{r Baboon analysis unsing lfmm (CpG) linear regression, echo =T}
+# linear with glm
+lfmm.linear<-readRDS("SampleData/Empirical_Data/baboon_example/lfmm_linear_raw.Rdata")
+
+linear.lfmm <- cbind.data.frame(b.meta,qval=lfmm.linear$fdrTool$qval,pcal=lfmm.linear$lfmm_Output$score)
+linear.lfmm$sig <-"Insignificant"
+# I used a 5% FDR threshold (as determined using the local FDR method from FDRtools)
+linear.lfmm$sig[lfmm.linear$fdrTool$lfdr <= 0.05] <-  "Significant"
+ggplot(linear.lfmm,aes(x=c(1:nrow(linear.lfmm)),y=-log10(qval),colour=sig)) + geom_point()
+
+# Graphs seem pretty 'noisy'
+```
+
+
+#### Overlapping significance
+```{r Baboon Analysis with lfmm (CpG) combined significance, echo=T}
+
+## Using qvalues from the linear regression, the significant values split into points shared between methods and those unique to each.
+comb.lfmm <- linear.lfmm
+comb.lfmm$sig[comb.lfmm$sig == "Significant"] <- "Significant (linear)"
+comb.lfmm$sig[linear.lfmm$sig == "Significant" & b.lfmm$sig == "Significant"] <- "Significant (both)"
+comb.lfmm$sig[linear.lfmm$sig == "Insignificant" & b.lfmm$sig == "Significant"] <- "Significant (Binomial)"
+ggplot(comb.lfmm,aes(x=c(1:nrow(comb.lfmm)),y=-log10(qval),colour=sig)) + geom_point()
+```
+
+## Oak Association Analysis  
+
+#### Using logistic regression (binomial(link=logit))
+```{r Oak Analysis with lfmm (CpG) linear, echo=T}
+q.cpgM <-q.cpg$B # create Y (methylation data)
+q.meta<-q.cpg$metadata
+b.b.X<-as.matrix(b.X) #
+
+q.lfmm.logit<-readRDS("SampleData/Empirical_Data/quercus_example/lfmm_BinomLogit_raw.Rdata")
+
+q.lfmm.log<-cbind.data.frame(q.meta,qval=q.lfmm.logit$fdrTool$qval)
+q.lfmm.log$sig<-"Insignificant"
+q.lfmm.log$sig[q.lfmm.logit$fdrTool$lfdr <= 0.05] <- "Significant"
+ggplot(q.lfmm.log,aes(x=c(1:nrow(q.lfmm.log)),
+                  y=-log10(qval),
+                  colour=sig)) + geom_point()
+```
+  
+  
+#### Using linear regression
+```{r Oak analysis unsing lfmm (CpG) linear regression, echo =T}
+
+q.lfmm.linear<-readRDS("SampleData/Empirical_Data/quercus_example/lfmm_linear_raw.Rdata")
+
+q.lfmm<-cbind.data.frame(q.meta,qval=q.lfmm.linear$fdrTool$qval)
+q.lfmm$sig<-"Insignificant"
+q.lfmm$sig[q.lfmm.linear$fdrTool$lfdr <= 0.05] <- "Significant"
+ggplot(q.lfmm,aes(x=c(1:nrow(q.lfmm)),
+                  y=-log10(qval),
+                  colour=sig)) + geom_point()
+```
+  
+  
+#### Overlapping significance
+```{r Oak Analysis with lfmm (CpG) combined significance, echo=T}
+## Using qvalues from the linear regression, the significant values split into points shared between methods and those unique to each.
+q.comb.lfmm <- q.lfmm
+q.comb.lfmm$sig[q.comb.lfmm$sig == "Significant"] <- "Significant (linear)"
+q.comb.lfmm$sig[q.lfmm$sig == "Significant" & q.lfmm.log$sig == "Significant"] <- "Significant (both)"
+q.comb.lfmm$sig[q.lfmm$sig == "Insignificant" & q.lfmm.log$sig == "Significant"] <- "Significant (Binomial)"
+ggplot(q.comb.lfmm,aes(x=c(1:nrow(q.comb.lfmm)),y=-log10(qval),colour=sig)) + geom_point()
+
+```
+  
+  
+
+# Simulations  
+
+## Baboon Simulation  
+
+### Simulation 1  
+
+##### Parameters:
+Sample Size = 50,100,250,500
+Number of Loci: 2000
+Number of latent factors (K): 1  
+Mean within locus Methylation: Randomly sampled from real data  
+Proportion of Confounding (prop.variance): seq(from=0.1,to=0.9,by=.1)  
+Sigma: 0.2  
+Mean effect size (mean.B): 1,2  
+Standard deviation of latent factors: Determined by PCA of real data  
+Mean standard deviation of loadings: 1  
+Variance of standard deviation of loadings: 0.2  
+Simulation runs (reps): 20  
+
+```{r Baboon sim FDR, echo=T}
+working.df<-readRDS("SampleData/Output_baboonSim/Final01.Rdata")$full.df
+ss<-working.df
+
+ss.summary<- ss %>% group_by(n,p,prop.variance,method,mean.B) %>%
+  summarise(mean.pFDR = mean(as.numeric(power_fdr),na.rm=T),mean.et0 = mean(as.numeric(et0),na.rm=T),
+            mean.eFDR = mean(as.numeric(error_fdr),na.rm=T))
+ss.summary<-transform(ss.summary,mean.B = factor(mean.B,levels=1:2,labels=c("Effect Size 1","Effect Size 2")))
+## Summary of power that has been fdr corrected
+ggplot(ss.summary,aes(x=prop.variance,y=mean.pFDR,colour=as.factor(n))) + 
+  geom_line() + geom_point() +facet_grid(mean.B~as.factor(method)) +
+  theme_bw() + labs(x="Proportion of confounding",y="Estimated Power (FDR <= 0.05)",colour="Sample Size")
+
+```
+  
+
+```{r}
+hitRankDFfix<-readRDS("SampleData/Output_baboonSim/HitRankEst.Rdata")
+hitRankSum <- hitRankDFfix %>% group_by(method,sim,hr) %>%
+  summarise(mean.q=mean(q),mean.tr=mean(tr),sd.tr=sd(tr))
+
+singleSim<-subset(ss,ss$method == "lfmm" & ss$rep == 1)
+singleSim<-singleSim[,c(1,2,7,10)]
+names(singleSim)<-c("sim",names(singleSim)[2:4])
+hitRankupdate<- inner_join(x=hitRankSum,y=singleSim)
+hitRankupdate<-transform(hitRankupdate,method = factor(method,levels=c(2,3,4,5,7,8),labels=c("lfmm","cate","sva","dsva","oracle","glm")))
+hitRankupdate<-transform(hitRankupdate,mean.B = factor(mean.B,levels=1:2,labels=c("Mean effect Size 1","Mean effect Size 2")))
+ggplot(hitRankupdate,aes(x=hr,y=mean.tr,interaction(as.factor(n),as.factor(prop.variance)),colour=as.factor(prop.variance),linetype=as.factor(n))) +
+  geom_line() + facet_grid(as.factor(mean.B)~method) + xlim(0,150) + ylim(0,55) + geom_hline(aes(yintercept=50,colour="red")) +
+  theme_bw() + labs(x = "Hit Rank",y = "Mean Causal Hits (30 simulations)")
+
+```
+  
+## Qak Simulation  
+
+### Simulation 1  
+
+##### Parameters:  
+Sample Size: 50,250,500  
+Number of Loci: 2000  
+Number of latent factors (K): 1,3  
+Mean within locus Methylation: Randomly sampled from real data  
+Proportion of Confounding (prop.variance): seq(from=0.1,to=0.9,by=.1)  
+Sigma: 0.2  
+Mean effect size (mean.B): 1,2,5  
+Standard deviation of latent factors: Determined by PCA of real data  
+Mean standard deviation of loadings: 1  
+Variance of standard deviation of loadings: 0.2  
+Simulation runs (reps): 20  
+
+```{r Quercus Sim FDR, echo=T}
+working.q.df<-readRDS("SampleData/Output_quercusSim/FinalSimMethod.Rdata")$full.df
+
+ss<-working.q.df
+
+ss.summary<- ss %>% group_by(n,p,prop.variance,method,mean.B,K) %>%
+  summarise(mean.pFDR = mean(as.numeric(power_fdr),na.rm=T),mean.et0 = mean(as.numeric(et0),na.rm=T),
+            mean.eFDR = mean(as.numeric(error_fdr),na.rm=T))
+#ss.summary$mean.B<-as.factor(ss.summary$mean.B)
+ss.summary<-transform(ss.summary,mean.B = factor(mean.B,levels=1:2,labels=c("Effect Size 1","Effect Size 2")))
+ss.summary$Kfact<-as.factor(ss.summary$K)
+
+ggplot(ss.summary,aes(x=prop.variance,y=mean.pFDR,group=interaction(as.factor(n),Kfact),colour=as.factor(n),linetype=Kfact)) + 
+  geom_line() + geom_point() +facet_grid(mean.B~as.factor(method)) +
+  theme_bw() + labs(x="Proportion of confounding",y="Estimated Power (FDR <= 0.05)",colour="Sample Size")
+
+```
+  
+
+``` {r Pred. vs Hit Rank, echo=T}
+## Hit Rank vs Predictions
+
+hitRankDFfix<-readRDS("SampleData/Output_quercusSim/hitRankOutput.Rdata")
+hitRankSum <- hitRankDFfix %>% group_by(method,sim,hr) %>%
+  summarise(mean.q=mean(q),mean.tr=mean(tr),sd.tr=sd(tr))
+
+singleSim<-subset(ss,ss$method == "lfmm" & ss$rep == 1)
+singleSim<-singleSim[,c(1,2,4,7,10)]
+names(singleSim)<-c("sim",names(singleSim)[2:5])
+hitRankupdate<- inner_join(x=hitRankSum,y=singleSim)
+hitRankupdate<-transform(hitRankupdate,method = factor(method,levels=c(2,3,4,5,7,8),labels=c("lfmm","cate","sva","dsva","oracle","glm")))
+hitRankupdate<-transform(hitRankupdate,mean.B = factor(mean.B,levels=1:2,labels=c("Mean effect Size 1","Mean effect Size 2")))
+hitRankupdate$kfactor<-as.factor(hitRankupdate$K)
+
+hitRanksingleFactor<-subset(hitRankupdate,hitRankupdate$K == "1")
+ggplot(hitRanksingleFactor,aes(x=hr,y=mean.tr,interaction(as.factor(n),as.factor(prop.variance)),colour=as.factor(prop.variance),linetype=as.factor(n))) +
+  geom_line() + facet_grid(as.factor(mean.B)~method) + xlim(0,150) + ylim(0,55) + geom_hline(aes(yintercept=50,colour="red")) +
+  theme_bw() + labs(x = "Hit Rank",y = "Mean Causal Hits (30 simulations)")
+
+```
+  
+
+
+
+
+
+
