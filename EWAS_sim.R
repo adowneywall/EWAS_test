@@ -132,12 +132,16 @@ summary(lm(sim.data$Y.list[[1]][,60]~bestim[,60]))
 CL<-sim.data$CL.list[[1]]
 mc<-sim.data$mcount.list[[1]]
 tc<-sim.data$tcount.list[[1]]
-x<-sim.data$X.list[[1]]
+x<-sim.data$X.list[[1]] # phenotype
+ll<-sim.data$B.list[[1]] # effect size of phenotype
 y<-as.matrix(sim.data$Y.list[[1]])
 lf<-sim.data$U.list[[1]]
 as.matrix(unlist(sim.data$U.list[[1]],ncol=4))
 
-
+summary(lm(x$V1~lf))
+screeplot(prcomp(y),type="l")
+covMat<-cor(lf[,1])
+?cor()
 
 p=2000
 i=1
@@ -146,6 +150,8 @@ m=max(tc[,i])
 fact<-cbind.data.frame(x=x$V1,lf)
 lo_z<-NULL
 lo_p<-NULL
+lom_z<-NULL
+lom_p<-NULL
 qop_z<-NULL
 qop_p<-NULL
 qoc_z<-NULL
@@ -154,15 +160,51 @@ bop_z<-NULL
 bop_p<-NULL
 boc_z<-NULL
 boc_p<-NULL
+bocm_z<-NULL
+bocm_p<-NULL
 pvalB1<-NULL
 zscoreB1<-NULL
 pvalB2<-NULL
 zscoreB2<-NULL
+
 for(i in 1:ncol(y)){
+  print(i)
+  print("1")
+  
+  linear_min<-summary(glm(y[,i]~x,
+                          data=fact))
+  lom_z[i]<-linear_min$coeff[2,3]
+  lom_p[i]<-linear_min$coeff[2,4]
+  b1<-summary(glm(y[,1]~.,
+                    data=fact,
+                 binomial(link="logit")))
+  b2<-summary(glm(y[,1]~.,
+                  data=fact,
+                  binomial(link="probit")))
+  anova(gaus,b1,b2)
+  
+  lom_z[i]<-gaus$coeff[2,3]
+  lom_p[i]<-linear_min$coeff[2,4]
+  
+  print("2")
+  binom_out_cmin<-summary(glm(cbind(mc[,i],tc[,i]-mc[,i])~x,
+                           binomial(link="logit"),
+                           data=fact))
+  
+  bocm_z[i]<-binom_out_cmin$coeff[2,3]
+  bocm_p[i]<-binom_out_cmin$coeff[2,4]
+}
+  
+  
   linear_out<-summary(glm(y[,i]~.,
                           data=fact))
   lo_z[i]<-linear_out$coeff[2,3]
   lo_p[i]<-linear_out$coeff[2,4]
+  
+  linear_min<-summary(glm(y[,i]~x,
+                          data=fact))
+  lom_z[i]<-linear_min$coeff[2,3]
+  lom_p[i]<-linear_min$coeff[2,4]
   
   quasi_out_p<-summary(glm(y[,i]~.,
                            quasibinomial(link="logit"),
@@ -191,6 +233,13 @@ for(i in 1:ncol(y)){
   boc_z[i]<-binom_out_c$coeff[2,3]
   boc_p[i]<-binom_out_c$coeff[2,4]
   
+  binom_out_cmin<-summary(glm(cbind(mc[,i],tc[,i]-mc[,i])~x,
+                              binomial(link="logit"),
+                              data=fact))
+  
+  bocm_z[i]<-binom_out_cmin$coeff[2,3]
+  bocm_p[i]<-binom_out_cmin$coeff[2,4]
+  
   bbinom_out_f<-betabin(cbind(mc[,i],tc[,i]-mc[,i])~.,~1,link = "logit",data=fact) # full beta binom
   bbinom_out_m<-betabin(cbind(mc[,i],tc[,i]-mc[,i])~x,~1,link = "logit",data=fact) # just x
   
@@ -212,7 +261,10 @@ for(i in 1:ncol(y)){
   print(i)
 }
 score.df<-data.frame(lo_z,qop_z,qoc_z,bop_z,boc_z,zscoreB1,zscoreB2)
-scoreFull.df<-data.frame(pos=c(1:2000),lo_z,qop_z,qoc_z,bop_z,boc_z,zscoreB1,zscoreB2)
+scoreFull.df<-data.frame(pos=c(1:2000),lo_z,qop_z,qoc_z,bop_z,boc_z,zscoreB1,zscoreB2,
+                         lom_z,bocm_z,x,ll)
+scoreFull.df$CL<-0
+scoreFull.df$CL[CL]<-1
 zscoreB1[zscoreB1 > 100]
 plot(abs(lo_z)~lo_p)
 plot(abs(lo_z)~abs(qop_z))
@@ -222,6 +274,20 @@ plot(abs(boc_z)~abs(qoc_z))
 plot(abs(boc_z)~abs(bop_z))
 plot(abs(boc_z)~abs(zscoreB2))
 plot(abs(boc_z)~abs(zscoreB1),xlim=c(0,60))
+plot(abs(zscoreB2)~abs(zscoreB1),xlim=c(0,60))
+
+ggplot(scoreFull.df,aes(x=abs(zscoreB1),y=abs(zscoreB2),colour=as.factor(CL))) + geom_point() +
+  xlim(0,75)
+ggplot(scoreFull.df,aes(x=abs(lo_z),y=abs(lom_z),colour=as.factor(CL))) + geom_point()
+ggplot(scoreFull.df,aes(x=abs(boc_z),y=abs(bocm_z),colour=as.factor(CL))) + geom_point()
+
+
+ggplot(scoreFull.df,aes(x=abs(lo_z),y=abs(ll),colour=as.factor(CL))) + geom_point()
+ggplot(scoreFull.df,aes(x=abs(boc_z),y=abs(ll),colour=as.factor(CL))) + geom_point()
+ggplot(scoreFull.df,aes(x=abs(zscoreB1),y=abs(ll),colour=as.factor(CL))) + geom_point() +
+  xlim(0,75)
+
+
 
 library(reshape2)
 full<-melt(score.df) # long data version
