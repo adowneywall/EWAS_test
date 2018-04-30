@@ -75,24 +75,50 @@ b.pca<-prcomp(b.cpg$B)
 screeplot(b.pca) # really only one pc here
 b.pca.sd<-b.pca$sdev[1:10] # possible include more if you want to include more pcs in sims
 
-multi.sim.gen(n=c(50,250,500),
+multi.sim.gen(n=c(100),
               p=c(2000),
               K=c(1,3),
               freq=freq.multi,
-              prop.variance = seq(from=0.1,to=0.9,by=.2),
+              prop.variance = 0.6, #seq(from=0.1,to=0.9,by=.2),
               sigma=0.4,
-              mean.B = c(1,3), 
+              mean.B = c(3), 
               sd.U=b.pca.sd,
               sd.Um=0.2,
               sd.Usd=0.1,
               sd.V=.5,
-              rep=20,
+              rep=1,
               nb.t = nb.baboon,
               dir.name = "DATA/EWAS_Sims/", 
-              sim.folder = "baboon.ReRun")
+              sim.folder = "baboon.ReRun2")
+
+sim <- readRDS("DATA/EWAS_Sims/baboon.ReRun2_2018-04-30/Sim1/Rep1/100_2000_0.6_3.Rdata")
+dim(sim$Y)
+
+screeplot(prcomp(sim$Y))
+
+## transformations
+simINVLogit<-invlink(sim$Y,type = "logit")
+simQNORM <- qnorm(sim$Y)
+sum(is.infinite(simQNORM))
+#lfmm 
+lfmm_out<-lfmm::lfmm_ridge(Y = simINVLogit,X = sim$X,K =1)
+pval<-lfmm_test(Y = simINVLogit,X = sim$X,lfmm = lfmm_out,calibrate = "gif")
+
+lfmm_out<-lfmm::lfmm_ridge(Y = simQNORM,X = sim$X,K =1)
+pval<-lfmm_test(Y = simQNORM,X = sim$X,lfmm = lfmm_out,calibrate = "gif")
+pval$gif
+
+hist(pval$pvalue)
+hist(pval$calibrated.pvalue)
+
+
+
+## lm
+lm_inv <- lm(simINVlogit~.)
+
 
 ## Examining the performance of difference methods on simulated baboon data
-sim.folder<-"baboon.test_2018-04-27/"
+sim.folder<-"baboon.ReRun2_2018-04-30/"
 
 sMeta<-simMeta(sim.folder) # enter the name of folder w/ directory, returns parameters list [param] and sim folder name
 
