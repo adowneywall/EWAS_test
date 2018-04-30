@@ -60,6 +60,112 @@ ewas_generator <- function (n, # sample#
   B[outlier, 1] <- rnorm(outlier.nb, mean.B, sd.B) # some small proportion do have an effect (magnitude of effect controlled by user)
   
   # Random effects 
+  Epsilon = matrix(rnorm(n*p,sd=sigma),nrow=n)
+  
+  # Adding fixed factors (X *%* t(B)), 
+  # latent factors (U *%* t(V)), 
+  # and random effects (Epsilon) to determine DNA methylation (Y)
+  Z = U %*% t(V) + X %*% t(B) + Epsilon #add together all matrices of variation
+  
+  # measure of methylation mean (generally pulled from a distribution of true means (or medians) from 
+  # a real data set.)
+  M = matrix(rep(qnorm(freq),n) , nrow = n, byrow = T)
+
+  Y.raw = M + Z
+  Y = exp(Y.raw)/(1+exp(Y.raw))
+  
+  # Generated a matrix of same dimension as Y (beta vals), but with 'read counts' simulating the number of reads for 
+  # each locus for each individual. Standardized to minimum 10 reads using negative binomial distributions from empirical data  if(!is.null(nb.t)){
+  if(!is.null(nb.t)){ 
+    t.r<-matrix(nrow = nrow(Y),ncol = ncol(Y))
+    m.r<-matrix(nrow = nrow(Y),ncol = ncol(Y))
+    s<-NULL
+    for(i in 1:p){
+      s<-sample(1:nrow(nb.t),size = 1)
+      temp.r<-rnbinom(nrow(Y)*10,size=nb.t[s,1],mu=nb.t[s,2])
+      while(length((temp.r[temp.r >= MinRD & temp.r <= MaxRD])) < 20){
+         s<-sample(1:nrow(nb.t),size = 1)
+         temp.r<-rnbinom(nrow(Y),size=nb.t[s,1],mu=nb.t[s,2])
+      }
+      t.r[,i] <-sample(temp.r[which(temp.r >= MinRD & temp.r <=MaxRD)],nrow(Y),replace=T)
+      m.r[,i] <-round(Y[,i]*t.r[,i])
+    }
+  }else{
+    t.r<-NULL
+    m.r<-NULL
+  }
+  return(list(Y = Y, # unordered beta values
+              t.reads=t.r, # Total reads for a given locus
+              m.reads=m.r, # Methylated reads (determined as negative binomial)
+              freq = freq, # Vector of the selected beta-value means
+              Epsilon=Epsilon, # Matrix of error
+              M = M, # Matrix of mean (per locus) methylation values
+              X = X, # Phenotype (variable of interest)
+              causal = outlier, # Set of causal loci
+              covar.mat = covar.mat, #covariance matrix
+              U = U, #simulated confounders
+              V = V, #loadings
+              B = B, #effect sizes
+              freq = freq #mean methylation values
+              )
+         )
+}
+
+collapse<-function(x){
+  if(median(x)>= 0.5){
+    x[x<0.5]<-(1-x[x<0.5])
+  }
+  else{
+    x[x>=0.5]<-(1-x[x>=0.5])
+  }
+  return(x)
+}
+
+#### EWAS Generator FULL ####
+# Contains steps for alternative DNA methylation arrangement. Including ordering mean methylation with sd 
+# (i.e. high mean values correspond with high sd). 
+ewas_generator_full <- function (n, # sample#
+                            p, # loci#
+                            K, # latentfactor#
+                            freq = NULL, # vector of mean beta-values 
+                            prop.causal = 0.025,  # proportion of loci that are causal
+                            prop.variance = 0.6,  # intensity of confounding
+                            sigma = 0.2/10, # standard deviation of residual errors
+                            sd.B = 1.0,  # standard deviation of effect size
+                            mean.B = 5.0, # mean effect size
+                            sd.U = 1.0, # standard deviation for factors
+                            sd.V = 1.0, # sd.V standard deviations for loadings
+                            nb.t = NULL, # estimated negative binomial parameters for total read count
+                            MinRD = 10, # minimum number of reads in sim
+                            MaxRD = 100, 
+                            setSeed=NULL) 
+{
+  set.seed(setSeed) # this is to set permanent seed
+  outlier <- sample.int(p, prop.causal * p) # vector of the 'location' of the causal SMPs
+  outlier.nb = length(outlier) # total number of causal SMPs
+  
+  if (is.null(freq)) freq <- runif(p) # fills freq vector is user doesn't provide mean b-values
+  
+  ### Generates the covariance matrix
+  cs <- runif(K, min = -1, max = 1) 
+  theta <- sqrt(prop.variance/sum((cs/sd.U)^2))
+  Sigma <- diag(x = sd.U^2, nrow = K, ncol = K) # Identity matrix with standard deviation along diagonal
+  Sigma <- rbind(Sigma, matrix(cs*theta, nrow = 1))
+  Sigma <- cbind(Sigma, matrix(c(cs*theta, 1), ncol = 1))
+  covar.mat<-Sigma
+  
+  ## Uses multi-variate NORMAL dist to create values for the variable of interest (X), latent factors (U), and laten factor 
+  # loadings (V), the effect sizes have an expected value of zero with causal SMPs having an effect stated by the user
+  UX <- MASS::mvrnorm(n, mu = rep(0, K + 1), Sigma = Sigma) # variable of interest and factors modeled together for known correlation
+  U <- UX[, 1:K, drop = FALSE]
+  X <- UX[, K + 1, drop = FALSE]
+  V <- MASS::mvrnorm(p, mu = rep(0, K), Sigma = sd.V^2 * diag(K))
+  
+  # Actual effect of variable of interest
+  B <- matrix(0, p, 1) # variable will have zero effect on most loci
+  B[outlier, 1] <- rnorm(outlier.nb, mean.B, sd.B) # some small proportion do have an effect (magnitude of effect controlled by user)
+  
+  # Random effects 
   #Epsilon = MASS::mvrnorm(n, mu = rep(0, p), Sigma = sigma^2 * diag(p))
   Epsilon = matrix(rnorm(n*p,sd=sigma),nrow=n)
   #dim(Epsilon2)
@@ -99,8 +205,8 @@ ewas_generator <- function (n, # sample#
       s<-sample(1:nrow(nb.t),size = 1)
       temp.r<-rnbinom(nrow(Y)*10,size=nb.t[s,1],mu=nb.t[s,2])
       while(length((temp.r[temp.r >= MinRD & temp.r <= MaxRD])) < 20){
-         s<-sample(1:nrow(nb.t),size = 1)
-         temp.r<-rnbinom(nrow(Y),size=nb.t[s,1],mu=nb.t[s,2])
+        s<-sample(1:nrow(nb.t),size = 1)
+        temp.r<-rnbinom(nrow(Y),size=nb.t[s,1],mu=nb.t[s,2])
       }
       t.r[,i] <-sample(temp.r[which(temp.r >= MinRD & temp.r <=MaxRD)],nrow(Y),replace=T)
       m.r[,i] <-round(Y[,i]*t.r[,i])
@@ -114,36 +220,27 @@ ewas_generator <- function (n, # sample#
   }
   #Y.collapse = apply(Y,2,function(x){collapse(x)}) # outdated 
   return(list(#Y = Y, #beta values
-              Y = Y, # unordered beta values
-              #Y.raw = Y.raw, # beta-values before pnorm adjustment
-              #Y.logit = Y.logit,
-              t.reads=t.r,
-              m.reads=m.r,
-              #Y.collapse = Y.collapse, # beta-values collapsed into a 0-0.5 or 1-0.5 range
-              freq = freq, # Vector of the selected beta-value means
-              Epsilon=Epsilon, 
-              M = M,
-              X = X, #phenotype
-              causal = outlier, #set of causal loci
-              covar.mat = covar.mat, #covariance matrix
-              U = U, #simulated confounders
-              V = V, #loadings
-              B = B,  #effect sizes
-              Z = Z, #matrix of variation
-              freq = freq #mean methylation values
-              )
-         )
+    Y = Y, # unordered beta values
+    #Y.raw = Y.raw, # beta-values before pnorm adjustment
+    #Y.logit = Y.logit,
+    t.reads=t.r,
+    m.reads=m.r,
+    #Y.collapse = Y.collapse, # beta-values collapsed into a 0-0.5 or 1-0.5 range
+    freq = freq, # Vector of the selected beta-value means
+    Epsilon=Epsilon, 
+    M = M,
+    X = X, #phenotype
+    causal = outlier, #set of causal loci
+    covar.mat = covar.mat, #covariance matrix
+    U = U, #simulated confounders
+    V = V, #loadings
+    B = B,  #effect sizes
+    Z = Z, #matrix of variation
+    freq = freq #mean methylation values
+  )
+  )
 }
 
-collapse<-function(x){
-  if(median(x)>= 0.5){
-    x[x<0.5]<-(1-x[x<0.5])
-  }
-  else{
-    x[x>=0.5]<-(1-x[x>=0.5])
-  }
-  return(x)
-}
 
 #### EWAS Generator 2 ####
 ewas_generator2 <- function (n, 
