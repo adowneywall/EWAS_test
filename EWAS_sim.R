@@ -8,21 +8,29 @@ library(dSVA)
 library(sva)
 library(fdrtool)
 library(RefFreeEWAS)
-
+library(aod)
+library(HRQoL)
+library(lfmm)
+library(devtools)
 source("EWAS_generator.R")
 source("EWAS_methodTest.R")
 
 #install.packages("stringi", dependencies=TRUE, INSTALL_opts = c('--no-lock'))
 
 ### Reading in process empirical data ####
-q.cpg<-readRDS("DATA/Empirical_Data/quercus_example/cpg_pruned.RData")
+q.cpg<-readRDS("SampleData/Empirical_Data/quercus_example/cpg_pruned.RData")
 q.chh<-readRDS("DATA/Empirical_Data/quercus_example/chh_pruned.RData")
 q.chg<-readRDS("DATA/Empirical_Data/quercus_example/chg_pruned.RData")
-b.cpg <- readRDS("DATA/Empirical_Data/baboon_example/baboon_prune.RData")
+b.cpg<-readRDS("SampleData/Empirical_Data/baboon_example/baboon_prune.RData")
+
+## Alt median 
+b.cpg.median<-apply(b.cpg$B,1,function(x){median(x)})
+hist(b.cpg.median)
 
 # used fitdistr function to estimate alpha and beta (shape 1 and 2) for a negative  binomial dist.
 # this can be used to create 'reads' from simulated beta values to mimic real data
 nb.baboon<-readRDS("DATA/Empirical_Data/baboon_example/negBinomFitParam.Rdata")
+dim(nb.baboon)
 
 q.cpg.means<-data.frame(x="Q-CpG",y=q.cpg$means)
 q.chh.means<-data.frame(x="Q-CHH",y=q.chh$means)
@@ -33,16 +41,16 @@ ggplot(species.means,aes(x=x,y=y)) + geom_violin() + labs(y="Mean B-values",x=""
   theme_bw()
 
 #### Single simulation Tests ####
-
 ## Simulation Arguments
 N.NUM = 50 # number of individuals
 P.NUM = 2000 # number of loci
 sample<-q.cpg$B
-freq.e<-species.means[species.means$x == "Q-CpG",]
+freq.e<-q.cpg$means
 
 #### Single Dataset Simulation
 # With empirically derived b-val means
 sim_empiricalMean<-ewas_generator(N.NUM,P.NUM,5,sd.U = 1,sd.V=1,sigma=1,freq = sample(x = freq.e,size = P.NUM ,replace=T)) 
+
 # random means from uniform distribution
 sim_randMean<-ewas_generator(N.NUM,P.NUM,5,sd.U = 1,sd.V=1,sigma=1,freq = NULL)
 
@@ -65,48 +73,313 @@ for(i in N:M){
 }
 
 ### Multi simulation Tests ####
-freq.multi<-q.cpg$means
+freq.multi<-b.cpg$means
 
 ## getting real variance to parameterize pcs
 #baboon data
-b.pca<-prcomp(q.cpg$B)
+b.pca<-prcomp(b.cpg$B)
 screeplot(b.pca) # really only one pc here
-b.pca.sd<-b.pca$sdev[1] # possible include more if you want to include more pcs in sims
+b.pca.sd<-b.pca$sdev[1:10] # possible include more if you want to include more pcs in sims
 
-multi.sim.gen(n=c(50,250,500),
+multi.sim.gen(n=c(100),
               p=c(2000),
               K=c(1,3),
               freq=freq.multi,
-              prop.variance = seq(from=0.1,to=0.9,by=.1),
-              sigma=0.2,
-              mean.B = c(1,2,5), 
+              prop.variance = 0.6, #seq(from=0.1,to=0.9,by=.2),
+              sigma=0.4,
+              mean.B = c(3), 
               sd.U=b.pca.sd,
-              sd.Um=1,
-              sd.Usd=0.2,
-              rep=20,
-              nb.t = NULL,
+              sd.Um=0.2,
+              sd.Usd=0.1,
+              sd.V=.5,
+              rep=1,
+              nb.t = nb.baboon,
               dir.name = "DATA/EWAS_Sims/", 
-              sim.folder = "quercus_Final")
+              sim.folder = "baboon.ReRun2")
+
+sim <- readRDS("DATA/EWAS_Sims/baboon.ReRun2_2018-04-30/Sim1/Rep1/100_2000_0.6_3.Rdata")
+dim(sim$Y)
+
+screeplot(prcomp(sim$Y))
+
+## transformations
+simINVLogit<-invlink(sim$Y,type = "logit")
+simQNORM <- qnorm(sim$Y)
+sum(is.infinite(simQNORM))
+#lfmm 
+lfmm_out<-lfmm::lfmm_ridge(Y = simINVLogit,X = sim$X,K =1)
+pval<-lfmm_test(Y = simINVLogit,X = sim$X,lfmm = lfmm_out,calibrate = "gif")
+
+lfmm_out<-lfmm::lfmm_ridge(Y = simQNORM,X = sim$X,K =1)
+pval<-lfmm_test(Y = simQNORM,X = sim$X,lfmm = lfmm_out,calibrate = "gif")
+pval$gif
+
+hist(pval$pvalue)
+hist(pval$calibrated.pvalue)
+
+
+
+## lm
+lm_inv <- lm(simINVlogit~.)
+
 
 ## Examining the performance of difference methods on simulated baboon data
-sim.folder<-"quercus_Final_2018-04-19/"
+sim.folder<-"baboon.ReRun2_2018-04-30/"
 
 sMeta<-simMeta(sim.folder) # enter the name of folder w/ directory, returns parameters list [param] and sim folder name
 
 # Options for selecting a subset of your simulation list for testing
-sub.list<-sMeta$param[1:108,] #subset(sMeta$param,sMeta$param$n >= 100 & sMeta$param$p >= 2000)
+sub.list<-sMeta$param#[3,] #subset(sMeta$param,sMeta$param$n >= 100 & sMeta$param$p >= 2000)
 
 #simRange<-seq(from=1,to=max(sim.list$X))
 simRange<- sub.list$Sim
 
-baboon.Final01<-simTest(sMeta$sim,simRange,sMeta$param,K.est = T,
+example<-simTest(sMeta$sim,simRange,sMeta$param,K.est = T,
                         lfmm.test = T,cate.test = T,RFEM.test = F,SVA.test = T,dSVA.test = T,
-                        oracle.test = T,glm.test = T,rep.times = 20)
+                        oracle.test = T,glm.test = T,rep.times = 1)
+
+example<-simRead(SimRun = sMeta$sim,sim = sMeta$param,reps = 1)
+
+lfmm_out<-lfmm::lfmm_ridge(Y = example$Y.list[[1]],X = example$X.list[[1]],K =10)
+pca<-prcomp(example$Y.list[[1]])
+screeplot(pca)
+pval<-lfmm_test(Y = example$Y.list[[1]],X = example$X.list[[1]],lfmm = lfmm_out,calibrate = "gif")
+pval$gif
+hist(pval$pvalue)
+hist(pval$calibrated.pvalue)
+
+
 #dir.create("DATA/EWAS_Sims/quercus_Final_2018-04-19/Output")
 #saveRDS(baboon.Final01,"DATA/EWAS_Sims/quercus_Final_2018-04-19/Output/FinalSimMethod.Rdata")
 ## currently K.est needs to = T, otherwise script won't run
 
-#### Short work up of quercus example
+#### Testing alternative regression methods ####
+### Baboon Sample rerun with count data
+# sim.folder<-"baboon.final2_2018-04-24/"
+# 
+# sMeta<-simMeta(sim.folder) # enter the name of folder w/ directory, returns parameters list [param] and sim folder name
+# 
+# # Options for selecting a subset of your simulation list for testing
+# sub.list<-sMeta$param[1,] #subset(sMeta$param,sMeta$param$n >= 100 & sMeta$param$p >= 2000)
+# 
+# #simRange<-seq(from=1,to=max(sim.list$X))
+# simRange<- sub.list$Sim
+# sim<-sMeta$param[50,]
+# reps=20
+# sim.data<-NULL
+# sim.data<-simRead(sim.folder,sim,reps)
+# saveRDS(sim.data,"DATA/EWAS_Sims/baboonfinal2_Sim1Rep20.Rdata")
+
+sim.data <- readRDS("SampleData/Output_baboonSim/baboonfinal2_Sim52Rep20.Rdata")\
+
+sim.data <- readRDS("SampleData/Output_baboonSim/baboonfinal2_Sim52Rep20.Rdata")
+bestim<-sim.data$mcount.list[[1]]/sim.data$tcount.list[[1]]
+plot(sim.data$Y.list[[1]][,60]~bestim[,60])
+summary(lm(sim.data$Y.list[[1]][,60]~bestim[,60]))
+
+mc<-sim.data$mcount.list[[1]]
+tc<-sim.data$tcount.list[[1]]
+x<-sim.data$X.list[[1]] # phenotype
+ll<-sim.data$B.list[[1]] # effect size of phenotype
+y<-as.matrix(sim.data$Y.list[[1]])
+lf<-sim.data$U.list[[1]]
+as.matrix(unlist(sim.data$U.list[[1]],ncol=4))
+
+summary(lm(x$V1~lf))
+screeplot(prcomp(y),type="l")
+covMat<-cor(lf[,1])
+?cor()
+
+p=2000
+i=1
+m=max(tc[,i])
+
+fact<-cbind.data.frame(x=x$V1,lf)
+lo_z<-NULL
+lo_p<-NULL
+lom_z<-NULL
+lom_p<-NULL
+qop_z<-NULL
+qop_p<-NULL
+qoc_z<-NULL
+qoc_p<-NULL
+bop_z<-NULL
+bop_p<-NULL
+boc_z<-NULL
+boc_p<-NULL
+bocm_z<-NULL
+bocm_p<-NULL
+pvalB1<-NULL
+zscoreB1<-NULL
+pvalB2<-NULL
+zscoreB2<-NULL
+
+for(i in 1:ncol(y)){
+  print(i)
+  print("1")
+  
+  linear_min<-summary(glm(y[,i]~x,
+                          data=fact))
+  lom_z[i]<-linear_min$coeff[2,3]
+  lom_p[i]<-linear_min$coeff[2,4]
+  b1<-summary(glm(y[,1]~.,
+                    data=fact,
+                 binomial(link="logit")))
+  b2<-summary(glm(y[,1]~.,
+                  data=fact,
+                  binomial(link="probit")))
+  anova(gaus,b1,b2)
+  
+  lom_z[i]<-gaus$coeff[2,3]
+  lom_p[i]<-linear_min$coeff[2,4]
+  
+  print("2")
+  binom_out_cmin<-summary(glm(cbind(mc[,i],tc[,i]-mc[,i])~x,
+                           binomial(link="logit"),
+                           data=fact))
+  
+  bocm_z[i]<-binom_out_cmin$coeff[2,3]
+  bocm_p[i]<-binom_out_cmin$coeff[2,4]
+}
+  
+  
+  linear_out<-summary(glm(y[,i]~.,
+                          data=fact))
+  lo_z[i]<-linear_out$coeff[2,3]
+  lo_p[i]<-linear_out$coeff[2,4]
+  
+  linear_min<-summary(glm(y[,i]~x,
+                          data=fact))
+  lom_z[i]<-linear_min$coeff[2,3]
+  lom_p[i]<-linear_min$coeff[2,4]
+  
+  quasi_out_p<-summary(glm(y[,i]~.,
+                           quasibinomial(link="logit"),
+                           data=fact))
+  qop_z[i]<-quasi_out_p$coeff[2,3]
+  qop_p[i]<-quasi_out_p$coeff[2,4]
+  
+  quasi_out_c<-summary(glm(cbind(mc[,i],tc[,i]-mc[,i])~.,
+                           quasibinomial(link="logit"),
+                           data=fact))
+  qoc_z[i]<-quasi_out_c$coeff[2,3]
+  qoc_p[i]<-quasi_out_c$coeff[2,4]
+  
+  #fact<-cbind.data.frame(x$V1,lf)
+  binom_out_p<-summary(glm(y[,i]~.,
+                           binomial(link="logit"),
+                           data=fact))
+  
+  bop_z[i]<-binom_out_p$coeff[2,3]
+  bop_p[i]<-binom_out_p$coeff[2,4]
+  
+  binom_out_c<-summary(glm(cbind(mc[,i],tc[,i]-mc[,i])~.,
+                           binomial(link="logit"),
+                           data=fact))
+  
+  boc_z[i]<-binom_out_c$coeff[2,3]
+  boc_p[i]<-binom_out_c$coeff[2,4]
+  
+  binom_out_cmin<-summary(glm(cbind(mc[,i],tc[,i]-mc[,i])~x,
+                              binomial(link="logit"),
+                              data=fact))
+  
+  bocm_z[i]<-binom_out_cmin$coeff[2,3]
+  bocm_p[i]<-binom_out_cmin$coeff[2,4]
+  
+  bbinom_out_f<-betabin(cbind(mc[,i],tc[,i]-mc[,i])~.,~1,link = "logit",data=fact) # full beta binom
+  bbinom_out_m<-betabin(cbind(mc[,i],tc[,i]-mc[,i])~x,~1,link = "logit",data=fact) # just x
+  
+  if(!is.na(bbinom_out_f@varparam)){
+    zscoreB1[i]<-bbinom_out_f@fixed.param[2]/sqrt(bbinom_out_f@varparam[2,2])
+    pvalB1[i]<-2 * (1 - pnorm(abs(zscoreB1)))
+  }else{
+    zscoreB1[i]<-999
+    pvalB1[i]<-999
+  }
+  
+  if(!is.na(bbinom_out_m@varparam)){
+    zscoreB2[i]<-bbinom_out_m@fixed.param[2]/sqrt(bbinom_out_m@varparam[2,2])
+    pvalB2[i]<-2 * (1 - pnorm(abs(zscoreB2)))
+  }else{
+    zscoreB2[i]<-999
+    pvalB2[i]<-999
+  }
+  print(i)
+}
+score.df<-data.frame(lo_z,qop_z,qoc_z,bop_z,boc_z,zscoreB1,zscoreB2)
+scoreFull.df<-data.frame(pos=c(1:2000),lo_z,qop_z,qoc_z,bop_z,boc_z,zscoreB1,zscoreB2,
+                         lom_z,bocm_z,x,ll)
+scoreFull.df$CL<-0
+scoreFull.df$CL[CL]<-1
+zscoreB1[zscoreB1 > 100]
+plot(abs(lo_z)~lo_p)
+plot(abs(lo_z)~abs(qop_z))
+plot(abs(lo_z)~abs(qoc_z))
+plot(abs(qop_z)~abs(qoc_z))
+plot(abs(boc_z)~abs(qoc_z))
+plot(abs(boc_z)~abs(bop_z))
+plot(abs(boc_z)~abs(zscoreB2))
+plot(abs(boc_z)~abs(zscoreB1),xlim=c(0,60))
+plot(abs(zscoreB2)~abs(zscoreB1),xlim=c(0,60))
+
+ggplot(scoreFull.df,aes(x=abs(zscoreB1),y=abs(zscoreB2),colour=as.factor(CL))) + geom_point() +
+  xlim(0,75)
+ggplot(scoreFull.df,aes(x=abs(lo_z),y=abs(lom_z),colour=as.factor(CL))) + geom_point()
+ggplot(scoreFull.df,aes(x=abs(boc_z),y=abs(bocm_z),colour=as.factor(CL))) + geom_point()
+
+
+ggplot(scoreFull.df,aes(x=abs(lo_z),y=abs(ll),colour=as.factor(CL))) + geom_point()
+ggplot(scoreFull.df,aes(x=abs(boc_z),y=abs(ll),colour=as.factor(CL))) + geom_point()
+ggplot(scoreFull.df,aes(x=abs(zscoreB1),y=abs(ll),colour=as.factor(CL))) + geom_point() +
+  xlim(0,75)
+
+
+
+library(reshape2)
+full<-melt(score.df) # long data version
+full$pos<-rep(c(1:2000),7) # add relative positions
+full<-subset(full,full$value < 250)
+
+ggplot(scoreFull.df,aes(x=pos,y=abs(zscoreB2))) + geom_point(alpha=0.2) +
+  geom_point(aes(x=CL,y=scoreFull.df$zscoreB2[CL],alpha=0.2))
+  geom_vline(xintercept = c(CL),alpha=0.2)
+
+### Full melted plot
+ggplot(full,aes(x=pos,y=abs(value),group=variable,colour=variable)) + 
+  geom_point(aes(alpha=0.2)) +
+  geom_vline(xintercept = c(CL),alpha=0.2)
+
+#### Example BBmm ####
+?BBmm()
+# Defining the parameters
+k <- 100
+m <- 10
+phi <- 0.5
+beta <- c(1.5,-1.1)
+sigma <- 0.5
+
+# Simulating the covariate and random effects
+x <- runif(k,0,10)
+X <- model.matrix(~x)
+z <- as.factor(rBI(k,4,0.5,2))
+Z <- model.matrix(~z-1)
+u <- rnorm(5,0,sigma)
+
+
+# The linear predictor and simulated response variable
+eta <- beta[1]+beta[2]*x+crossprod(t(Z),u)
+p <- 1/(1+exp(-eta))
+y <- rBB(k,m,p,phi)
+dat <- data.frame(cbind(y,x,z))
+dat$z <- as.factor(dat$z)
+
+# Apply the model
+model <- BBmm(fixed.formula = y~x,random.formula = ~z,m=c(y+m),data=dat)
+model
+
+
+#### Short work up of quercus example ####
 #Sim info:
 # n=c(50,250,500),
 # p=c(2000),
@@ -126,6 +399,16 @@ baboon.Final01<-simTest(sMeta$sim,simRange,sMeta$param,K.est = T,
 
 working.q.df<-readRDS("DATA/EWAS_Sims/quercus_Final_2018-04-19/Output/FinalSimMethod.Rdata")$full.df
 
+sub<-subset(working.q.df,working.q.df$n == 500)
+sub
+q.df<-readRDS("DATA/EWAS_Sims/quercus_Final_2018-04-19/Output/FinalSimMethod.Rdata")
+q.df$full.df
+q
+values<-q.df[[2]][[3]][[1]]
+new.val<-values[[1]]
+new.val[,1]
+hist(new.val[,1])
+colnames(values)
 ss<-working.q.df
 ss.sub <- subset(ss,ss$n == 250)
 ss.sub <- subset(ss.sub,ss.sub$p == 2000)
@@ -218,7 +501,7 @@ saveRDS(object = hitRankDFfix,file = "DATA/EWAS_Sims/quercus_Final_2018-04-19/Ou
 hitRankDFfix<-readRDS("DATA/EWAS_Sims/quercus_Final_2018-04-19/Output/hitRankOutput.Rdata")
 hitRankSum <- hitRankDFfix %>% group_by(method,sim,hr) %>%
   summarise(mean.q=mean(q),mean.tr=mean(tr),sd.tr=sd(tr))
-
+library(ggplot2)
 singleSim<-subset(ss,ss$method == "lfmm" & ss$rep == 1)
 singleSim<-singleSim[,c(1,2,4,7,10)]
 names(singleSim)<-c("sim",names(singleSim)[2:5])
@@ -239,7 +522,7 @@ ggplot(hitRanksingleEffectSize,aes(x=hr,y=mean.tr,interaction(as.factor(n),as.fa
   theme_bw() + labs(x = "Hit Rank",y = "Mean Causal Hits (30 simulations)")
 
 
-#### Short work up for Baboon based data work up
+#### Short work up for Baboon based data work up ####
 # Based on simulations 
 # with variable:
 # n = 50,100,250,500
@@ -250,7 +533,8 @@ ggplot(hitRanksingleEffectSize,aes(x=hr,y=mean.tr,interaction(as.factor(n),as.fa
 # sd.U=b.pca.sd,
 # sd.Um=1,
 # sd.Usd=0.2,
-# sim data has 100, I only ran the test on 20
+# sim data has 200reps (since deleted), I only ran the test on 20 (10 left)
+# only 72 sims
 working.df<-readRDS("DATA/EWAS_Sims/baboon_Final_2018-04-16/Output/Final01.Rdata")$full.df
 
 ss<-working.df
@@ -380,7 +664,7 @@ ggsave(filename = "DATA/EWAS_Sims/baboon_Final_2018-04-16/Output/HitPlotCateSum.
 wmean(ss$K.bcv,na.rm=T)
 mean(ss$K.leek)
 
-### Examining performance of logit-transformed beta-values.
+### Examining performance of logit-transformed beta-values. ####
 P<-2000
 N<-50
 log.test<-ewas_generator(n = N,p = P,K = 1,freq = sample(q.cpg.means$y,size = P,replace=T),
