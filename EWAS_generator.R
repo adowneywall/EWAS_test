@@ -18,6 +18,9 @@ library(MASS)
 #sd.V	standard deviations for loadings.
 
 #### EWAS Generator ####
+
+sim_randMean<-ewas_generator(N.NUM,P.NUM,5,sd.U = 1,sd.V=1,sigma=1,freq = NULL)
+sim_randMean$Y
 ewas_generator <- function (n, # sample#
                             p, # loci#
                             K, # latentfactor#
