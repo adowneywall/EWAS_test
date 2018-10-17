@@ -1,0 +1,35 @@
+---
+title: "EWAS_methodsEquations"
+author: "adowneywall"
+date: "May 2, 2018"
+output: html_document
+---
+
+# EWAS_Generator
+Currently approach: 
+Simulation DNA methylation data by using user inputted parameters for start size and structure to simulating variable DNA methylation based on a set of correlated latent factors and a variable of interest (voi), along with some degree of random variation. The voi and latent factors are ideal informed by real data (i.e. the number and magnitude, implemented as the sd of a particular lf, of latent factors). They are modelled as normally distributed variables, and an correlation matrix (based on user inputs) will establish the degree of correlation between the voi and lfs. This allows for the user to explore differing levels of lf confounding. The simulated latent factors and voi are summed into a matrix
+
+
+In the process, you can explore how differing levels of latent factor confounding will impact the ability for downstream statistical approaches to identify true associations between the DNA Methylation data simulation and the voi.
+
+
+## Identity matrix (sigma) for model simulation (implemented in EWAS_generator script)  
+
+ \begin{pmatrix}
+ sd_{1} & 0        & 0 & 0       \\
+ 0        & sd_{2} & 0 & 0       \\
+ 0        & 0        & . & 0     \\
+ 0        &          & 0 & sd_{k}\\
+ 
+ \end{pmatrix}
+ 
+ ## VOI and Latent Factor structure  
+  
+ ## DNA methylation  
+ 
+ $$log(\frac{p}{1-p}) = B^{T}X + V^{T}U + \epsilon$$
+ 
+ 
+ 
+ 
+ 
