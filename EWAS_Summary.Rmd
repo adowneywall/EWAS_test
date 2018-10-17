@@ -31,6 +31,7 @@ Number of individuals: **50**
 Sequencing: **RRBS**  
 Methylation Motif: **CpG**  
 Data Format: **Read Count Data** (this was converted into proprotion data, beta-values, by dividing the $\frac{number of methylated reads}{number of total reads}$)  
+
 **Final filtered dataset Criteria**:  
 ```{r echo=FALSE}
 b.cpg$pruneData

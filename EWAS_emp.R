@@ -17,19 +17,21 @@ q.pred<-readRDS("DATA/Empirical_Data/quercus_example/predictors.RData")
 
 ## Baboon
 b.cpg <- readRDS("DATA/Empirical_Data/baboon_example/baboon_prune.RData")
-b.cpg.raw <- readRDS("DATA/Empirical_Data/baboon_example/baboon_raw.RData")
+b.cpg.raw <- readRDS("SampleData/Empirical_Data/baboon_example/baboon_raw.RData")
 b.X<-read.table(file ="DATA/Empirical_Data/baboon_example/BSSeq_Baboon/predictor_n50.txt")
 b.kin<-read.table(file="DATA/Empirical_Data/baboon_example/BSSeq_Baboon/relatedness_n50.txt")
 
 # Multi Species Plot ####
-q.cpg.means<-data.frame(x="Q-CpG",y=q.cpg$means)
-q.chh.means<-data.frame(x="Q-CHH",y=q.chh$means)
-q.chg.means<-data.frame(x="Q-CHG",y=q.chg$means)
-baboon<-data.frame(x="Baboon",y=b.cpg$means)
+q.cpg.means<-data.frame(x="Quercus-CpG",y=q.cpg$means)
+q.chh.means<-data.frame(x="Quercus-CHH",y=q.chh$means)
+q.chg.means<-data.frame(x="Quercus-CHG",y=q.chg$means)
+baboon<-data.frame(x="Yellow Baboon-CpG",y=b.cpg$means)
 species.means<-rbind(q.cpg.means,q.chh.means,q.chg.means,baboon)
 ggplot(species.means,aes(x=x,y=y)) + geom_violin() + labs(y="Mean B-values",x="") +
-  theme_bw()
+  theme_bw() + theme(axis.text=element_text(size=15),
+                     axis.title=element_text(size=14,face="bold"))
 
+ggsave(file="DATA/Empirical_Data/speciesMeanPlot3.png")
 # Perform PCA on different datasets (quercus and baboon so far) ####
 
 ## With pruned data
@@ -46,12 +48,20 @@ screeplot(q.chh.pca)
 plot(q.chh.pca$sdev[2:10]^2,type="l")
 
 b.cpg.pca<-prcomp(b.cpg$B)
-screeplot(b.cpg.pca)
-plot(b.cpg.pca$sdev[2:10]^2,type="l")
+screeplot(b.cpg.pca,type="l")
+png('DATA/ScreePlotEx.png')
+plot(b.cpg.pca$sdev[2:10]^2,type="b",ylab="Variance",xlab="Principle Components")
+abline(h=0.065,col="red")
+dev.off()
+
+# Comparing first PC in baboon with phenotype
+lmout<-lm(pc1~b.X$V1)
 
 #Raw data
 q.cpg.raw<-readRDS("DATA/Empirical_Data/quercus_example/cpg_raw.RData")[,6:63] # doesn't work with missing values
 head(q.cpg.raw) # holes prevent pca
+
+
 #q.cpg.raw.pca<-prcomp(q.cpg.raw)
 #screeplot(q.cpg.raw.pca,type='l')
 
@@ -119,18 +129,78 @@ b.b<-b.cpg$B # create Y (methylation data)
 b.meta<-b.cpg$metadata
 b.b.X<-as.matrix(b.X) # X
 
-### Model fitting (only run if necessary -  it will be slow) ####
+### Model fitting (only run if necessary it will be slow) ####
 library(lfmm)
+library(cate)
 library(fdrtool)
-mod.lfmm <- lfmm::lfmm_ridge(t(b.b),b.b.X, K = 1) #lfmm estimate of latent factors
-lfmmTest<-lfmm_test(t(b.b),b.b.X,lfmm=mod.lfmm)
+
+## LFMM
+# 1 factor
+mod.lfmm1 <- lfmm::lfmm_ridge(t(b.b),b.b.X, K = 1) #lfmm estimate of latent factors
+# 3 factor
+mod.lfmm4 <- lfmm::lfmm_ridge(t(b.b),b.b.X, K = 4) #lfmm estimate of latent factors
+
+## CATE 
+b.b.cate<-data.frame(V1=b.b.X[,1])
+# 1 factor
+mod.cate1 <- cate(~ V1,b.b.cate,t(b.b), r = 1,adj.method = "rr")
+# 1 factor
+mod.cate4 <- cate(~ V1,b.b.cate,t(b.b), r = 4,adj.method = "rr")
+
+## tests based on GLMs
+b.b[which(b.b > 1)] <- 1 # some b-value estimates are over 1 and need to be corrected
+scores.lfmm1<-binomal.glm.test(t(b.b),b.b.cate,mod.lfmm1$U)
+scores.lfmm4<-binomal.glm.test(t(b.b),b.b.cate,mod.lfmm4$U)
+scores.cate1<-binomal.glm.test(t(b.b),b.b.cate,mod.cate1$Z)
+scores.cate4<-binomal.glm.test(t(b.b),b.b.cate,mod.cate4$Z)
+
+plot(scores.lfmm1[,2]~scores.lfmm4[,2])
+hist(scores.lfmm4[,2])
+lfm2.r <- scores.lfmm4[,2][!scores.lfmm4[,2] == max(scores.lfmm4[,2])]
+lfm1.r <- scores.lfmm1[,2][!scores.lfmm4[,2] == max(scores.lfmm4[,2])]
+plot(lfm1.r~lfm2.r)
+plot(scores.cate1~scores.lfmm1) 
+abline(a = 0,b = 1,col="red")
+plot(scores.cate4~scores.lfmm1) 
+abline(a = 0,b = 1,col="red")
+plot(scores.cate4~scores.cate1) 
+abline(a = 0,b = 1,col="red")
+
+# Multiple hypothesis corrections
+lfmm.1.gif <- median(scores.lfmm1[,2]^2)/0.456
+lfmm.4.gif <- median(scores.lfmm4[,2]^2)/0.456
+cate.1.gif <- median(scores.cate1[,2]^2)/0.456
+cate.4.gif <- median(scores.cate4[,2]^2)/0.456
+
+plot(-log(scores.cate1[,3])~-log(scores.cate4[,3]))
+plot(-log(scores.cate1[,3])~-log(scores.lfmm1[,3]))
+
+# FDR tool
+lfmm1fdr.adj<-fdrtool(scores.lfmm1[,2],statistic = c("normal"),verbose = F,plot = T)
+lfmm4fdr.adj<-fdrtool(scores.lfmm4[,2],statistic = c("normal"),verbose = F,plot = T)
+cate1fdr.adj<-fdrtool(scores.cate1[,2],statistic = c("normal"),verbose = F,plot = T)
+cate4fdr.adj<-fdrtool(scores.cate4[,2],statistic = c("normal"),verbose = F,plot = T)
+
+plot(scores.lfmm1[,1]~scores.lfmm1[,3]) # unadjusted pval vs. gif adjusted
+plot(lfmm1fdr.adj$pval~scores.lfmm1[,1]) # undjusted pval vs. fdr tool adjusted
+plot(lfmm1fdr.adj$pval~scores.lfmm1[,3]) # fdr tool adjusted vs. gif adjusted
+plot(lfmm1fdr.adj$pval~lfmm1fdr.adj$qval)
+
+#Plotting log10 qvalues by location
+b.meta$locint<-as.integer(b.meta$chrom.loc)
+plot(-log10(lfmm1fdr.adj$qval)~b.meta$locint)
+
+# Saving Data
+lfmm.list<-list(scores=scores,fdrTool=fdr.adj)
+saveRDS(lfmm.list,"DATA/Empirical_Data/baboon_example/lfmm_BinomLogit_raw.Rdata")
+  
+
+## Testing lfmm with lm in lfmm_test function
+# One factor model
+lfmmTest<-lfmm_test(t(b.b),b.b.X,lfmm=mod.lfmm1)
 l.fdr.adj<-fdrtool(as.vector(lfmmTest$score),statistic = c("normal"),verbose = F,plot = T)
 l.fdr.adj$lfdr[l.fdr.adj$lfdr < 0.05]
-# b.b[which(b.b > 1)] <- 1 # converts all methylation values over 1 to 1.
-# scores<-binomal.glm.test(t(b.b),b.b.X,mod.lfmm$U) # glm with probit link function (beta distr.)
-# fdr.adj<-fdrtool(scores[,2],statistic = c("normal"),verbose = F,plot = T) #for evaluating fdrtools
-# lfmm.list<-list(scores=scores,fdrTool=fdr.adj)
-# saveRDS(lfmm.list,"DATA/Empirical_Data/baboon_example/lfmm_BinomLogit_raw.Rdata")
+#Saving Data 
 lfmm.linear.list<-list(lfmm_Output=lfmmTest,fdrTool=l.fdr.adj)
 saveRDS(lfmm.linear.list,"SampleData/Empirical_Data/baboon_example/lfmm_linear_raw.Rdata")
 
@@ -147,6 +217,10 @@ linear.lfmm <- cbind.data.frame(b.meta,qval=lfmm.linear$qval)
 linear.lfmm$sig <-  "Insiginificant"
 linear.lfmm$sig[lfmm.linear$fdrTool$lfdrl <= 0.05] <-  "Significant"
 ggplot(linear.lfmm,aes(x=c(1:nrow(linear.lfmm)),y=-log10(qval),colour=sig)) + geom_point()
+
+
+
+
 
 # Quercus data w/ predictor ####
 q.cpgM <-q.cpg$B # create Y (methylation data)

@@ -69,28 +69,24 @@ ewas_generator <- function (n, # sample#
   
   # measure of methylation mean (generally pulled from a distribution of true means (or medians) from 
   # a real data set.)
-  M = matrix(rep(sample(qnorm(freq),size = p,replace=T),n), nrow = n, byrow = T)
-  
-  dim(M)
-  dim(Z)
+  M = matrix(rep(qnorm(freq),n) , nrow = n, byrow = T)
+
   Y.raw = M + Z
   Y = exp(Y.raw)/(1+exp(Y.raw))
   
   # Generated a matrix of same dimension as Y (beta vals), but with 'read counts' simulating the number of reads for 
   # each locus for each individual. Standardized to minimum 10 reads using negative binomial distributions from empirical data  if(!is.null(nb.t)){
-  if(!is.null(nb.t)){
+  if(!is.null(nb.t)){ 
     t.r<-matrix(nrow = nrow(Y),ncol = ncol(Y))
     m.r<-matrix(nrow = nrow(Y),ncol = ncol(Y))
     s<-NULL
     for(i in 1:p){
-      s <- NULL
       s<-sample(1:nrow(nb.t),size = 1)
-      temp.r<-rnbinom(nrow(Y)*100,size=nb.t[s,1],mu=nb.t[s,2])
+      temp.r<-rnbinom(nrow(Y)*10,size=nb.t[s,1],mu=nb.t[s,2])
       while(length((temp.r[temp.r >= MinRD & temp.r <= MaxRD])) < 20){
          s<-sample(1:nrow(nb.t),size = 1)
          temp.r<-rnbinom(nrow(Y),size=nb.t[s,1],mu=nb.t[s,2])
       }
-      
       t.r[,i] <-sample(temp.r[which(temp.r >= MinRD & temp.r <=MaxRD)],nrow(Y),replace=T)
       m.r[,i] <-round(Y[,i]*t.r[,i])
     }
@@ -131,7 +127,7 @@ collapse<-function(x){
 ewas_generator_full <- function (n, # sample#
                             p, # loci#
                             K, # latentfactor#
-                            freq = NULL, # vector of mean beta-values 
+                            freq = b.cpg.median, # vector of mean beta-values 
                             prop.causal = 0.025,  # proportion of loci that are causal
                             prop.variance = 0.6,  # intensity of confounding
                             sigma = 0.2/10, # standard deviation of residual errors
@@ -179,13 +175,17 @@ ewas_generator_full <- function (n, # sample#
   
   ##o.order<-c(1:p)
   Z = U %*% t(V) + X %*% t(B) + Epsilon #add together all matrices of variation
+  hist(Z)
+  max(Z)
   
   ##rZ<-rev(order(abs(rowMeans(t(Z))))) # order rows of matrix by level of variation
   ##o.order<-o.order[rZ]
   ##Z.ord<-t(t(Z)[rZ,])
   # measure of methylation mean (generally pulled from a distribution of true means (or medians) from 
-  # a real data set.)
+  # a real data set.
+  ?qnorm()
   M = matrix(rep(qnorm(freq),n) , nrow = n, byrow = T)
+  hist(M)
   ##rM<-order((abs(rowMeans(t(M)-0.5))))
   ##M.ord<-(t(t(M)[rM,]))
   
@@ -348,7 +348,7 @@ ewas_test<-function(n = 200,
 multi.sim.gen<-function(n, 
                         p, 
                         K, 
-                        freq = NA,
+                        freq = NULL,
                         prop.causal = 0.025,  # proportion of loci that are causal
                         prop.variance = 0.6,  # intensity of confounding
                         sigma = 0.2, # standard deviation of residual errors
@@ -362,87 +362,9 @@ multi.sim.gen<-function(n,
                         nb.t = NULL, # size and mu estimates for simulating read counts for beta values
                         setSeed=NULL,
                         rep = 1,
-                        setWD=NA,
-                        dir.name = "DATA/EWAS_Sims/",
-                        sim.folder = "FirstSimTestRun"){
-  
-  ## Setting WD if different sets new WD
-  if(!is.na(setWD)){setwd(setWD)}
-  
-  sim.file.update<-paste(dir.name,sim.folder,"_",Sys.Date(),sep = "")
-  if(file.exists(sim.file.update)){
-    evalkey(readkey())
-    unlink(sim.file.update,recursive = T)
-  }
-  scenarios <- expand.grid(n,p,K,NA,prop.causal,prop.variance,sigma,sd.B,mean.B,NA,sd.V,1:rep)
-  colnames(scenarios)<-c("n","p","K","freq","prop.causal","prop.variance","sigma","sd.b","mean.B","sd.U","sd.V","Rep")
-  scenarios.print<-cbind(Sim=1:nrow(subset(scenarios,scenarios$Rep == 1)),subset(scenarios,scenarios$Rep == max(rep)))
-  dir.create(sim.file.update)
-  
-  ## Save simulation list
-  write.csv(x=scenarios.print,file = paste(sim.file.update,"/SimulationParameterList.csv",sep=""),
-            row.names = F)
-  
-  ## Run each simulation
-  for(i in 1:((nrow(scenarios))/rep)){
-    new.folder.name<-paste(sim.file.update,"/Sim",i,sep="")
-    print(paste("..Sim",i," of Sim",nrow(subset(scenarios,scenarios$Rep == 1,sep=""))))
-    suppressWarnings(dir.create(new.folder.name))
-
-    # Complete each replicate of the simulation
-    for(j in 1:rep){
-      s.sub<-subset(scenarios,scenarios$Rep==j)
-      temp.scenario<-ewas_generator(n = s.sub$n[i],
-                                    p = s.sub$p[i],
-                                    K = s.sub$K[i],
-                                    freq = sample(freq,size=s.sub$p[i],replace=T),
-                                    prop.causal = s.sub$prop.causal[i],
-                                    prop.variance = s.sub$prop.variance[i],
-                                    sigma = s.sub$sigma[i],
-                                    sd.B = s.sub$sd.b[i],
-                                    mean.B = s.sub$mean.B[i],
-                                    sd.U = sd.U[1:s.sub$K[i]],
-                                    sd.V = s.sub$sd.V[i],
-                                    nb.t = nb.t)
-      rep.fold<-paste(new.folder.name,"/Rep",s.sub$Rep[i],sep="")
-      dir.create(rep.fold)
-      saveRDS(temp.scenario,
-              file = paste(rep.fold,
-                           "/",s.sub$n[i],
-                           "_",s.sub$p[i],
-                           "_",s.sub$prop.variance[i],
-                           "_",s.sub$mean.B[i],
-                           ".Rdata",sep=""))
-      print(paste("....Rep ",j," of ",rep,sep=""))
-    }
-    print(paste("Simulation run in process... approximately ", round((i*rep)/nrow(scenarios)*100,digits=1)," % complete...",sep="")) 
-  }
-}
-
-#### Multi Simulation Generator (outdated)####
-
-multi.sim.genOut<-function(n, 
-                        p, 
-                        K, 
-                        freq = NA,
-                        prop.causal = 0.025,  # proportion of loci that are causal
-                        prop.variance = 0.6,  # intensity of confounding
-                        sigma = 0.2, # standard deviation of residual errors
-                        sd.B = 1.0,  # standard deviation of effect size
-                        mean.B = 5.0, # mean effect size
-                        sd.U = 1.0, # standard deviation for factors
-                        sd.Um = 0.4, # Mean of sd
-                        sd.Usd = 0.3, # sd of sd 
-                        sd.V = 1.0, # sd.V standard deviations for loadings
-                        runs = 1, # number of times each sim
-                        nb.t = NULL, # size and mu estimates for simulating read counts for beta values
-                        setSeed=NULL,
-                        rep = 1,
-                        setWD=NA,
                         dir.name = "DATA/EWAS_Sims/",
                         sim.folder = "FirstSimTestRun"){
   initial=Sys.time()
-  if(!is.na(setWD)){setwd(setWD)}
   sim.file.update<-paste(dir.name,sim.folder,"_",Sys.Date(),sep = "")
   if(file.exists(sim.file.update)){
     evalkey(readkey())
@@ -499,43 +421,13 @@ multi.sim.genOut<-function(n,
                            "_",s.sub$prop.variance[i],
                            "_",s.sub$mean.B[i],
                            ".Rdata",sep=""))
-      # write.csv(x=temp.scenario$Y,
-      #           file = paste(rep.fold,"/Y_",s.sub$n[i],"_",s.sub$p[i],"_",s.sub$prop.variance[i],"_",s.sub$mean.B[i],".csv",sep=""),
-      #           row.names = F)
-      # write.csv(x=temp.scenario$Y.logit,
-      #           file = paste(rep.fold,"/Ylogit_",s.sub$n[i],"_",s.sub$p[i],"_",s.sub$prop.variance[i],"_",s.sub$mean.B[i],".csv",sep=""),
-      #           row.names = F)
-      # write.csv(x=temp.scenario$Y2,
-      #           file = paste(rep.fold,"/Y2_",s.sub$n[i],"_",s.sub$p[i],"_",s.sub$prop.variance[i],"_",s.sub$mean.B[i],".csv",sep=""),
-      #           row.names = F)
-      # write.csv(x=temp.scenario$X,
-      #           file = paste(rep.fold,"/X_",s.sub$n[i],"_",s.sub$p[i],"_",s.sub$prop.variance[i],"_",s.sub$mean.B[i],".csv",sep=""),
-      #           row.names = F)
-      # write.csv(x=temp.scenario$U,
-      #           file = paste(rep.fold,"/U_",s.sub$n[i],"_",s.sub$p[i],"_",s.sub$prop.variance[i],"_",s.sub$mean.B[i],".csv",sep=""),
-      #           row.names = F)
-      # write.csv(x=temp.scenario$V,
-      #           file = paste(rep.fold,"/V_",s.sub$n[i],"_",s.sub$p[i],"_",s.sub$prop.variance[i],"_",s.sub$mean.B[i],".csv",sep=""),
-      #           row.names = F)
-      # write.csv(x=temp.scenario$B,
-      #           file = paste(rep.fold,"/B_",s.sub$n[i],"_",s.sub$p[i],"_",s.sub$prop.variance[i],"_",s.sub$mean.B[i],".csv",sep=""),
-      #           row.names = F)
-      # 
-      # write.csv(x=temp.scenario$covar.mat,file = paste(rep.fold,"/covar_",s.sub$n[i],"_",s.sub$p[i],"_",s.sub$prop.variance[i],"_",s.sub$mean.B[i],".csv",sep=""))
-      # write.csv(x=temp.scenario$causal, file = paste(rep.fold,"/causalLoci_",s.sub$n[i],"_",s.sub$p[i],"_",s.sub$prop.variance[i],"_",s.sub$mean.B[i],".csv",sep=""))
-      # write.csv(x=temp.scenario$freq, file = paste(rep.fold,"/simMeans_",s.sub$n[i],"_",s.sub$p[i],"_",s.sub$prop.variance[i],"_",s.sub$mean.B[i],".csv",sep=""))
-      # if(!is.null(nb.t)){
-      #   write.csv(x=temp.scenario$t.reads,file = paste(rep.fold,"/tReads_",s.sub$n[i],"_",s.sub$p[i],"_",s.sub$prop.variance[i],"_",s.sub$mean.B[i],".csv",sep=""))
-      #   write.csv(x=temp.scenario$m.reads,file = paste(rep.fold,"/mReads_",s.sub$n[i],"_",s.sub$p[i],"_",s.sub$prop.variance[i],"_",s.sub$mean.B[i],".csv",sep=""))
-      # }
-      
       print(paste("....Rep ",j," of ",rep,sep=""))
     }
     print(paste("Simulation run in process... approximately ", round((i*rep)/nrow(scenarios)*100,digits=1)," % complete...",sep="")) 
     }
 }
 
-#### Short Function ####
+### Short Fucntions ####
 readkey <- function()
 {
   cat("This directory already exists! Do you wish to overwrite it? \n[Y/N] then press [ENTER]")
@@ -556,72 +448,3 @@ evalkey<-function(x){
 exit <- function() {
   .Internal(.invokeRestart(list(NULL, NULL), NULL))
 }
-
-
-# multi.sim.gen2<-function(n, 
-#                         p, 
-#                         K, 
-#                         freq = NA,
-#                         prop.causal = 0.025,  # proportion of loci that are causal
-#                         prop.variance = 0.6,  # intensity of confounding
-#                         sigma = 0.2, # standard deviation of residual errors
-#                         sd.B = 1.0,  # standard deviation of effect size
-#                         mean.B = 5.0, # mean effect size
-#                         sd.U = 1.0, # standard deviation for factors
-#                         sd.Um = 0.4, # Mean of sd
-#                         sd.Usd = 0.3, # sd of sd 
-#                         sd.V = 1.0, # sd.V standard deviations for loadings
-#                         runs = 1, # number of times each sim
-#                         setSeed=NULL,
-#                         dir.name = "DATA/EWAS_Sims/",
-#                         sim.folder = "FirstSimTestRun"){
-#   
-#   scenarios <- expand.grid(n,p,K,NA,prop.causal,prop.variance,sigma,sd.B,mean.B,NA,sd.V)
-#   colnames(scenarios)<-c("n","p","K","freq","prop.causal","prop.variance","sigma","sd.b","mean.B","sd.U","sd.V")
-#   scenarios$Sim<-c(1:nrow(scenarios))
-#   dir.create(sim.file.update<-paste(dir.name,sim.folder,"_",Sys.Date(),sep = ""))
-#   write.csv(x=scenarios,file = paste(sim.file.update,"/SimulationParameterList.csv",sep=""))
-#   
-#   for(i in 1:(nrow(scenarios))*runs){
-#     temp.scenario<-ewas_generator(n = scenarios$n[i], 
-#                                   p = scenarios$p[i], 
-#                                   K = scenarios$K[i], 
-#                                   freq = NULL,
-#                                   prop.causal = scenarios$prop.causal[i], 
-#                                   prop.variance = scenarios$prop.variance[i], 
-#                                   sigma = scenarios$sigma[i], 
-#                                   sd.B = scenarios$sd.b[i],  
-#                                   mean.B = scenarios$mean.B[i], 
-#                                   sd.U = ifelse(is.null(ob),rnorm(2,mean=0.4,sd=0.3),ob), 
-#                                   sd.V = scenarios$sd.V[i])
-#     
-#     new.folder.name<-paste(sim.file.update,"/Sim",i,sep="")
-#     dir.create(new.folder.name)
-#     sim.description<-paste("List of Simulation Parameters \n n = ",scenarios$n[i],
-#                            "\n p = ", scenarios$p[i],
-#                            "\n K = ", scenarios$K[i],
-#                            "\n Beta-value frequency = ", scenarios$freq[i],
-#                            "\n prop.causal = ",scenarios$prop.causal[i],
-#                            "\n prop.variance = ",scenarios$prop.variance[i],
-#                            "\n Sigma = ",scenarios$sigma[i],
-#                            "\n Standard Deviation of Beta-values = ",scenarios$sd.b[i],
-#                            "\n Mean of Beta-values = ",scenarios$mean.B[i],
-#                            "\n Standard Deviation of latent factors (U) = ",scenarios$sd.U[i],
-#                            "\n Standard Deviation of factor loadings (V) = ",scenarios$sd.V[i],
-#                            sep = "")
-#     write.table(x=sim.description,
-#                 file = paste(new.folder.name,"/ParameterList_",scenarios$n[i],"_",scenarios$p[i],"_",scenarios$prop.variance[i],"_",scenarios$mean.B[i],".txt",sep=""),
-#                 col.names = F,row.names = F)
-#     write.csv(x=temp.scenario$Y,file = paste(new.folder.name,"/Y_",scenarios$n[i],"_",scenarios$p[i],"_",scenarios$prop.variance[i],"_",scenarios$mean.B[i],".csv",sep=""))
-#     write.csv(x=temp.scenario$X,file = paste(new.folder.name,"/X_",scenarios$n[i],"_",scenarios$p[i],"_",scenarios$prop.variance[i],"_",scenarios$mean.B[i],".csv",sep=""))
-#     write.csv(x=temp.scenario$U,file = paste(new.folder.name,"/U_",scenarios$n[i],"_",scenarios$p[i],"_",scenarios$prop.variance[i],"_",scenarios$mean.B[i],".csv",sep=""))
-#     write.csv(x=temp.scenario$V,file = paste(new.folder.name,"/V_",scenarios$n[i],"_",scenarios$p[i],"_",scenarios$prop.variance[i],"_",scenarios$mean.B[i],".csv",sep=""))
-#     write.csv(x=temp.scenario$B,file = paste(new.folder.name,"/B_",scenarios$n[i],"_",scenarios$p[i],"_",scenarios$prop.variance[i],"_",scenarios$mean.B[i],".csv",sep=""))
-#     write.csv(x=temp.scenario$covar.mat,file = paste(new.folder.name,"/covar_",scenarios$n[i],"_",scenarios$p[i],"_",scenarios$prop.variance[i],"_",scenarios$mean.B[i],".csv",sep=""))
-#     write.csv(x=temp.scenario$causal, file = paste(new.folder.name,"/causalLoci_",scenarios$n[i],"_",scenarios$p[i],"_",scenarios$prop.variance[i],"_",scenarios$mean.B[i],".csv",sep=""))
-#     print(paste("Simulation run in process... approximately ", round(i/nrow(scenarios)*100,digits=1)," % complete",sep=""))
-#     library(data.table)
-#     fwrite(x=temp.scenario$Y,file="DATA/EWAS_Sims/Hold",quote='auto')
-#     write.csv(x=temp.scenario$Y,file="DATA/EWAS_Sims/Hold")
-#   }
-# }

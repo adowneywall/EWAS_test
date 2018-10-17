@@ -11,49 +11,46 @@ library(RefFreeEWAS)
 library(aod)
 library(HRQoL)
 library(lfmm)
-
+library(devtools)
 source("EWAS_generator.R")
 source("EWAS_methodTest.R")
 
 #install.packages("stringi", dependencies=TRUE, INSTALL_opts = c('--no-lock'))
 
 ### Reading in process empirical data ####
-# q.cpg<-readRDS("DATA/Empirical_Data/quercus_example/cpg_pruned.RData")
-# q.chh<-readRDS("DATA/Empirical_Data/quercus_example/chh_pruned.RData")
-# q.chg<-readRDS("DATA/Empirical_Data/quercus_example/chg_pruned.RData")
-# b.cpg<-readRDS("DATA/Empirical_Data/baboon_example/baboon_prune.RData")
+q.cpg<-readRDS("SampleData/Empirical_Data/quercus_example/cpg_pruned.RData")
+q.chh<-readRDS("DATA/Empirical_Data/quercus_example/chh_pruned.RData")
+q.chg<-readRDS("DATA/Empirical_Data/quercus_example/chg_pruned.RData")
+b.cpg<-readRDS("SampleData/Empirical_Data/baboon_example/baboon_prune.RData")
 
-q.cpg<-readRDS("SampleData/q_cpg_pruned.RData")
-q.chh<-readRDS("SampleData/q_chh_pruned.RData")
-q.chg<-readRDS("SampleData/q_chg_pruned.RData")
-b.cpg<-readRDS("SampleData/b_prune.RData")
-b.cpg.raw<-readRDS("SampleData/b_raw.RData")
-b.pred<-readRDS("SampleData/b_predictors.RData")
+## Alt median 
+b.cpg.median<-apply(b.cpg$B,1,function(x){median(x)})
+hist(b.cpg.median)
 
 # used fitdistr function to estimate alpha and beta (shape 1 and 2) for a negative  binomial dist.
 # this can be used to create 'reads' from simulated beta values to mimic real data
-nb.baboon<-readRDS("SampleData/b_negBinomFitParam.Rdata")
+nb.baboon<-readRDS("DATA/Empirical_Data/baboon_example/negBinomFitParam.Rdata")
+dim(nb.baboon)
 
 q.cpg.means<-data.frame(x="Q-CpG",y=q.cpg$means)
 q.chh.means<-data.frame(x="Q-CHH",y=q.chh$means)
 q.chg.means<-data.frame(x="Q-CHG",y=q.chg$means)
 baboon<-data.frame(x="Baboon",y=b.cpg$means)
-
 species.means<-rbind(q.cpg.means,q.chh.means,q.chg.means,baboon)
 ggplot(species.means,aes(x=x,y=y)) + geom_violin() + labs(y="Mean B-values",x="") +
   theme_bw()
-
 
 #### Single simulation Tests ####
 ## Simulation Arguments
 N.NUM = 50 # number of individuals
 P.NUM = 2000 # number of loci
 sample<-q.cpg$B
-freq.e<-species.means[species.means$x == "Q-CpG",]
+freq.e<-q.cpg$means
 
 #### Single Dataset Simulation
 # With empirically derived b-val means
 sim_empiricalMean<-ewas_generator(N.NUM,P.NUM,5,sd.U = 1,sd.V=1,sigma=1,freq = sample(x = freq.e,size = P.NUM ,replace=T)) 
+
 # random means from uniform distribution
 sim_randMean<-ewas_generator(N.NUM,P.NUM,5,sd.U = 1,sd.V=1,sigma=1,freq = NULL)
 
@@ -76,193 +73,85 @@ for(i in N:M){
 }
 
 ### Multi simulation Tests ####
-freq.multi<-q.cpg$means
+freq.multi<-b.cpg$means
 
-### Getting real variance to parameterize pcs
-
-##Baboon data
+## getting real variance to parameterize pcs
+#baboon data
 b.pca<-prcomp(b.cpg$B)
 screeplot(b.pca) # really only one pc here
 b.pca.sd<-b.pca$sdev[1:10] # possible include more if you want to include more pcs in sims
 
-##Quercus data
-q.pca<-prcomp(q.cpg$B)
-screeplot(q.pca) # really only one pc here
-q.pca.sd<-q.pca$sdev[1:10] # possible include more if you want to include more pcs in sims
-
-#Alternative pca structure
-sd<-q.pca.sd[1]
-fix.pca.sd<-c(sd,sd*0.5,sd*0.25,sd*0.125,sd*0.0625)
-plot(fix.pca.sd~c(1:5))
-
-### Multi Simulation tests ####
-## Multi Sample Size ####
-multi.sim.gen(n=c(20,25,50,100),
+multi.sim.gen(n=c(100),
               p=c(2000),
-              K=c(4),
+              K=c(1,3),
               freq=freq.multi,
-              prop.variance = seq(from=0.1,to=0.9,by=.4),
+              prop.variance = 0.6, #seq(from=0.1,to=0.9,by=.2),
               sigma=0.4,
-              mean.B = c(1), 
-              sd.U=fix.pca.sd,
-              sd.Um=0.2,
-              sd.Usd=0.1,
-              sd.V=0.5,
-              rep=20,
-              nb.t = nb.baboon,
-              setWD="E:",
-              dir.name = "/EWAS_Test/EWAS_Sim/Quercus/", 
-              sim.folder = "quercus.sampleSizeFinal2")
-
-## Multi effect size ####
-multi.sim.gen(n=c(50),
-              p=c(2000),
-              K=c(4),
-              freq=freq.multi,
-              prop.variance = seq(from=0.1,to=0.9,by=.4),
-              sigma=0.4,
-              mean.B = c(0.5,1,2,3,4,5), 
-              sd.U=fix.pca.sd,
+              mean.B = c(3), 
+              sd.U=b.pca.sd,
               sd.Um=0.2,
               sd.Usd=0.1,
               sd.V=.5,
-              rep=20,
+              rep=1,
               nb.t = nb.baboon,
-              setWD="E:",
-              dir.name = "/EWAS_Test/EWAS_Sim/Quercus/", 
-              sim.folder = "quercus.EffectSizeFinal2")
+              dir.name = "DATA/EWAS_Sims/", 
+              sim.folder = "baboon.ReRun2")
 
-## Number of k factor groups ####
-multi.sim.gen(n=c(50),
-              p=c(2000),
-              K=c(1,2,3,4,5),
-              freq=freq.multi,
-              prop.variance = seq(from=0.1,to=0.9,by=.4),
-              sigma=0.4,
-              mean.B = c(1), 
-              sd.U=fix.pca.sd,
-              sd.Um=0.2,
-              sd.Usd=0.1,
-              sd.V=.5,
-              rep=20,
-              nb.t = nb.baboon,
-              setWD="E:",
-              dir.name = "/EWAS_Test/EWAS_Sim/Quercus/", 
-              sim.folder = "quercus.KfactorFinal2")
+sim <- readRDS("DATA/EWAS_Sims/baboon.ReRun2_2018-04-30/Sim1/Rep1/100_2000_0.6_3.Rdata")
+dim(sim$Y)
+
+screeplot(prcomp(sim$Y))
+
+## transformations
+simINVLogit<-invlink(sim$Y,type = "logit")
+simQNORM <- qnorm(sim$Y)
+sum(is.infinite(simQNORM))
+#lfmm 
+lfmm_out<-lfmm::lfmm_ridge(Y = simINVLogit,X = sim$X,K =1)
+pval<-lfmm_test(Y = simINVLogit,X = sim$X,lfmm = lfmm_out,calibrate = "gif")
+
+lfmm_out<-lfmm::lfmm_ridge(Y = simQNORM,X = sim$X,K =1)
+pval<-lfmm_test(Y = simQNORM,X = sim$X,lfmm = lfmm_out,calibrate = "gif")
+pval$gif
+
+hist(pval$pvalue)
+hist(pval$calibrated.pvalue)
 
 
-### Evaluating Statistical Methods ####
 
-## Quercus Sim - General ####
-sim.folder<-"EWAS_Test/EWAS_Sim/Quercusquercus.ReRun_2018-05-07/"
-simulation<-"Quercusquercus.ReRun_2018-05-07/"
+## lm
+lm_inv <- lm(simINVlogit~.)
 
-## Quercus Sim - lfmm test - Alternative K factors ####
-sf<-"EWAS_Test/EWAS_Sim/Quercus/quercus.standardKs_2018-05-08/"
-# Enter the name of folder w/ directory
-sM<-simMeta(sfr) 
+
+## Examining the performance of difference methods on simulated baboon data
+sim.folder<-"baboon.ReRun2_2018-04-30/"
+
+sMeta<-simMeta(sim.folder) # enter the name of folder w/ directory, returns parameters list [param] and sim folder name
+
 # Options for selecting a subset of your simulation list for testing
-sl<-subset(sM$param,sM$param$n==250)#[3,] #subset(sMeta$param,sMeta$param$n >= 100 & sMeta$param$p >= 2000)
-sR<- sl$Sim
-sfr<-"Quercus/quercus.standardKs_2018-05-08/"
+sub.list<-sMeta$param#[3,] #subset(sMeta$param,sMeta$param$n >= 100 & sMeta$param$p >= 2000)
 
-Quercus_altk<-simTest2(sf,sR,sM$param,
-                       dataType="Rdata",method=c(1,3),
-                       lfmm.test=T,cate.test=F,
-                       SVA.test = F, dSVA.test = F,
-                       oracle.test=T, linear.test=T,
-                       glm.logistic.test=F,bb.test = F,
-                       rep=T,rep.times=20,
-                       gif=1,fdr=0.05, K=c(1))
-saveRDS(object = Quercus_altk,file ="EWAS_Test/EWAS_Sim/QuercusaltK.Rdata" )
-
-## Baboon Sim - lfmm test ####
-sim.folder<-"EWAS_Test/EWAS_Sim/Baboon/baboon.ReRun_2018-04-27/"
-sim.folder<-"Baboon/baboon.ReRun_2018-04-27/"
-
-# Enter the name of folder w/ directory
-# returns parameters list [param] and sim folder name
-sMeta<-simMeta(sim.folder) 
-# Options for selecting a subset of your simulation list for testing
-sub.list<-subset(sMeta$param,sMeta$param$n==250)
 #simRange<-seq(from=1,to=max(sim.list$X))
 simRange<- sub.list$Sim
-BaboonRun_lfmm<-simTest2(sim.folder,simRange,sMeta$param,
-                         dataType="Rdata",method=c(1,3),
-                         lfmm.test=T,cate.test=F,
-                         SVA.test = F, dSVA.test = F,
-                         oracle.test=T, linear.test=T,
-                         glm.logistic.test=F,bb.test = F,
-                         rep=T,rep.times=20,
-                         gif=1,fdr=0.05, K=c(1))
-saveRDS(object = BaboonRun_lfmm,file ="EWAS_Test/EWAS_Sim/BaboonRunlfmm.Rdata" )
 
-## Quercus Sim - Sample Size ####
-sim.folder<-"EWAS_Test/EWAS_Sim/Quercus/quercus.sampleSizeFinal2_2018-05-12/"
-sim.ss<-simMeta(sim.folder)
-sR<- sim.ss$param$Sim
+example<-simTest(sMeta$sim,simRange,sMeta$param,K.est = T,
+                        lfmm.test = T,cate.test = T,RFEM.test = F,SVA.test = T,dSVA.test = T,
+                        oracle.test = T,glm.test = T,rep.times = 1)
 
-Quercus_ssk<-simTest2(sim.folder,sR,sim.ss$param,
-                       dataType="Rdata",method=c(1,3),
-                       lfmm.test=T,cate.test=F,
-                       SVA.test = F, dSVA.test = F,
-                       oracle.test=T, linear.test=T,
-                       glm.logistic.test=F,bb.test = F,
-                       rep=T,rep.times=20,
-                       gif=1,fdr=0.05, K=c(1))
-saveRDS(object = Quercus_altk,file ="EWAS_Test/EWAS_Sim/Quercus/QuercusSampleSize.Rdata" )
+example<-simRead(SimRun = sMeta$sim,sim = sMeta$param,reps = 1)
 
-## Quercus Sim - Effect Size ####
-sim.folder<-"EWAS_Test/EWAS_Sim/Quercus/quercus.EffectSizeFinal2_2018-05-12/"
-sim.ss<-simMeta(sim.folder)
-sR<- sim.ss$param$Sim
+lfmm_out<-lfmm::lfmm_ridge(Y = example$Y.list[[1]],X = example$X.list[[1]],K =10)
+pca<-prcomp(example$Y.list[[1]])
+screeplot(pca)
+pval<-lfmm_test(Y = example$Y.list[[1]],X = example$X.list[[1]],lfmm = lfmm_out,calibrate = "gif")
+pval$gif
+hist(pval$pvalue)
+hist(pval$calibrated.pvalue)
 
-Quercus_es<-simTest2(sim.folder,sR,sim.ss$param,
-                       dataType="Rdata",method=c(1,3),
-                       lfmm.test=T,cate.test=F,
-                       SVA.test = F, dSVA.test = F,
-                       oracle.test=T, linear.test=T,
-                       glm.logistic.test=F,bb.test = F,
-                       rep=T,rep.times=20,
-                       gif=1,fdr=0.05, K=c(1))
-saveRDS(object = Quercus_altk,file ="EWAS_Test/EWAS_Sim/Quercus/QuercusEffectSize.Rdata" )
 
-## Quercus Sim - K factors ####
-sim.folder<-"EWAS_Test/EWAS_Sim/Quercus/quercus.KfactorFinal2_2018-05-12/"
-sim.ss<-simMeta(sim.folder)
-sR<- sim.ss$param$Sim
-
-Quercus_kf<-simTest2(sim.folder,sR,sim.ss$param,
-                       dataType="Rdata",method=c(1,3),
-                       lfmm.test=T,cate.test=F,
-                       SVA.test = F, dSVA.test = F,
-                       oracle.test=T, linear.test=T,
-                       glm.logistic.test=F,bb.test = F,
-                       rep=T,rep.times=20,
-                       gif=1,fdr=0.05, K=c(1))
-saveRDS(object = Quercus_altk,file ="EWAS_Test/EWAS_Sim/Quercus/QuercusKFactor.Rdata" )
-
-### Visualization of Stats Sims ####
-Q.df <- QuercusRun_lfmm$full.df
-Q.dff <- Quercus_altk$full.df
-b.df <- BaboonRun_lfmm$full.df
-
-plot(Q.dff$power_fdr~b.df$power_fdr)
-names(Q.dff)[15]<-c("regression")
-names(b.df )[15]<-c("regression")
-ss <- b.df  
-
-ss.summary<- ss %>% group_by(n,method,K,prop.variance,regression,Kval) %>%
-  summarise(mean.pFDR = mean(as.numeric(power_fdr),na.rm=T),mean.et0 = mean(as.numeric(et0),na.rm=T),
-            mean.eFDR = mean(as.numeric(error_fdr),na.rm=T))
-
-  ss.summary<- ss %>% group_by(n,method,regression,Kval) %>%
-  summarise(mean.pFDR = mean(as.numeric(power_fdr),na.rm=T),mean.et0 = mean(as.numeric(et0),na.rm=T),
-            mean.eFDR = mean(as.numeric(error_fdr),na.rm=T))
-
-ggplot(ss.summary,aes(x=method,y=mean.pFDR,group=interaction(K,regression,Kval),colour=as.factor(K),shape=as.factor(regression))) + geom_point()
-ggplot(ss.summary,aes(x=method,y=mean.eFDR,group=interaction(n,regression,Kval),colour=as.factor(n),shape=as.factor(regression))) + geom_point()
-  
+#dir.create("DATA/EWAS_Sims/quercus_Final_2018-04-19/Output")
+#saveRDS(baboon.Final01,"DATA/EWAS_Sims/quercus_Final_2018-04-19/Output/FinalSimMethod.Rdata")
+## currently K.est needs to = T, otherwise script won't run
 
 #### Testing alternative regression methods ####
 ### Baboon Sample rerun with count data
@@ -281,8 +170,8 @@ ggplot(ss.summary,aes(x=method,y=mean.eFDR,group=interaction(n,regression,Kval),
 # sim.data<-simRead(sim.folder,sim,reps)
 # saveRDS(sim.data,"DATA/EWAS_Sims/baboonfinal2_Sim1Rep20.Rdata")
 
+sim.data <- readRDS("SampleData/Output_baboonSim/baboonfinal2_Sim52Rep20.Rdata")\
 
-#### Testing different regression methods ##
 sim.data <- readRDS("SampleData/Output_baboonSim/baboonfinal2_Sim52Rep20.Rdata")
 bestim<-sim.data$mcount.list[[1]]/sim.data$tcount.list[[1]]
 plot(sim.data$Y.list[[1]][,60]~bestim[,60])
@@ -417,7 +306,7 @@ for(i in 1:ncol(y)){
     pvalB2[i]<-999
   }
   print(i)
-
+}
 score.df<-data.frame(lo_z,qop_z,qoc_z,bop_z,boc_z,zscoreB1,zscoreB2)
 scoreFull.df<-data.frame(pos=c(1:2000),lo_z,qop_z,qoc_z,bop_z,boc_z,zscoreB1,zscoreB2,
                          lom_z,bocm_z,x,ll)
@@ -605,6 +494,8 @@ for(i in 1:108){ ## number of sims in simulation run object
   print(i)
 }
 
+#ggplot(mSim,aes(x=hr,y=tr)) + geom_line()
+
 hitRankDFfix<-hitRankDF[-1,]
 saveRDS(object = hitRankDFfix,file = "DATA/EWAS_Sims/quercus_Final_2018-04-19/Output/hitRankOutput.Rdata")
 hitRankDFfix<-readRDS("DATA/EWAS_Sims/quercus_Final_2018-04-19/Output/hitRankOutput.Rdata")
@@ -773,24 +664,7 @@ ggsave(filename = "DATA/EWAS_Sims/baboon_Final_2018-04-16/Output/HitPlotCateSum.
 wmean(ss$K.bcv,na.rm=T)
 mean(ss$K.leek)
 
-#### Alternative transformations of Methylation Sim data ####
-## transformations
-simINVLogit<-invlink(sim$Y,type = "logit")
-simQNORM <- qnorm(sim$Y)
-sum(is.infinite(simQNORM))
-#lfmm 
-lfmm_out<-lfmm::lfmm_ridge(Y = simINVLogit,X = sim$X,K =1)
-pval<-lfmm_test(Y = simINVLogit,X = sim$X,lfmm = lfmm_out,calibrate = "gif")
-
-lfmm_out<-lfmm::lfmm_ridge(Y = simQNORM,X = sim$X,K =1)
-pval<-lfmm_test(Y = simQNORM,X = sim$X,lfmm = lfmm_out,calibrate = "gif")
-pval$gif
-
-hist(pval$pvalue)
-hist(pval$calibrated.pvalue)
-
-
-#### Examining performance of logit-transformed beta-values. ####
+### Examining performance of logit-transformed beta-values. ####
 P<-2000
 N<-50
 log.test<-ewas_generator(n = N,p = P,K = 1,freq = sample(q.cpg.means$y,size = P,replace=T),
